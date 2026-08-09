@@ -1,8 +1,8 @@
-# Feline Exchange v0.7 — Live Workstation Integration
+# Feline Exchange v0.8 — Macro Research Workstation Completion
 
-Feline Exchange is a local-first observer, deterministic execution/replay simulator, and research platform. Version 0.6 remains paper/research only.
+Feline Exchange is a local-first observer, deterministic execution/replay simulator, and research platform. Version 0.8 remains paper/research only.
 
-v0.5 studies EUR/USD after Fed/ECB-style shocks, deliberately avoiding the initial announcement race. It models deterministic pre-event, announcement, shock, stabilization, post-event, and complete phases; research decisions classify continuation, mean reversion, or explicit NO_TRADE.
+v0.8 studies EUR/USD after Fed/ECB-style shocks, deliberately avoiding the initial announcement race. The Qt workstation opens CSV tick data and globally ordered mixed JSONL price/macro fixtures through one replay control. It models deterministic pre-event, announcement, shock, stabilization, post-event, and complete phases; research decisions classify continuation, mean reversion, or explicit NO_TRADE.
 
 Install with `python3 -m pip install -e .`, then launch with `python3 -m feline gui`. Open a CSV fixture, choose speed, and Start. The real `FelineRuntime` runs in a worker executor; typed events enter a bounded, nonblocking projection queue. Qt renders actual prices, watchlist values, portfolio, risk, AI availability, and filtered event history. Pause/resume/stop and consecutive replays work without restarting. Emergency stop activates both the in-process risk kill switch and persistent marker. Rendering is deliberately lossy under pressure; SQLite/core processing remains authoritative.
 
@@ -21,7 +21,7 @@ Level 1 never calls or waits for an LLM. Level 2 performs ordinary numerical wor
 
 ## Start
 
-Python 3.11+ is required; v0.1 has no third-party runtime dependencies.
+Python 3.11+ is required. PySide6 and pyqtgraph are declared project dependencies.
 
 ```bash
 cp config/feline.example.toml config/feline.toml
@@ -112,4 +112,8 @@ Current provider research and licensing cautions are in [docs/DATA_PROVIDERS.md]
 
 Feline adapts Lynx's useful patterns rather than copying its project: local OpenAI-compatible llama.cpp HTTP integration, loopback defaults, dataclass configuration, parameterized SQLite, and local/offline operation. It intentionally does not reuse Lynx's conversation memory, summarization, fact extraction, Wikipedia, filesystem tools, permission router, TTS, chat orchestration, or large PySide6 GUI. Lynx's unbounded model request and blocking server startup are unsuitable for the real-time path; Feline instead uses a timeout-bounded background queue and starts safely without a model.
 
-No GUI is included yet. A future dashboard should consume events/read models and remain outside the risk/execution authority path.
+## Qt macro workstation
+
+The existing dark Qt layout is retained. `Open Dataset` accepts CSV ticks and the `fed_macro`, `macro_continuation`, `macro_mean_reversion`, and `macro_no_trade` JSONL fixtures. Watchlist clicks select the chart without resetting replay. The chart fits once on first data, dataset reset, or instrument switch; `Fit` restores automatic range after manual zoom/pan. Horizon values appear progressively and remain `not reached` until measured.
+
+Signals, simulated orders/fills, durable completed trades, diagnostics, portfolio, risk, AI availability, and NO_TRADE counts are projected from runtime state. Closing the window stops workers and closes SQLite. Qt has no broker, strategy, or risk authority.

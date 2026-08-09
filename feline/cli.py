@@ -86,7 +86,7 @@ def main() -> None:
         finally:
             await runtime.stop()
             runtime.database.close()
-    print("Feline Exchange v0.5 starting in PAPER/RESEARCH mode (no live broker exists).")
+    print("Feline Exchange v0.8 starting in PAPER/RESEARCH mode (no live broker exists).")
     asyncio.run(execute())
     if args.command=="replay":
         costs=runtime.broker.portfolio_state();costs["turnover"]=sum(f.gross_value for f in runtime.broker.fills)
