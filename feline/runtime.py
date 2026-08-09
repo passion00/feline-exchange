@@ -19,6 +19,7 @@ from feline.risk.engine import RiskEngine
 from feline.storage.database import Database
 from feline.strategy.reference import ReferenceStrategy
 from feline.portfolio.allocator import PortfolioAllocator
+from feline.portfolio.trades import ExitReason,TradeLifecycle
 
 
 class FelineRuntime:
@@ -35,6 +36,7 @@ class FelineRuntime:
         self.regimes = RegimeDetector()
         self.strategy = ReferenceStrategy(config.strategy)
         self.allocator=PortfolioAllocator()
+        self.trades=TradeLifecycle()
         self.news_pipeline = NewsPipeline()
         self.tick_count = 0
         self.peak_equity = config.paper.initial_cash
@@ -61,6 +63,7 @@ class FelineRuntime:
         if isinstance(event,AIAnalysisResult):self.database.save_health("ai","available" if event.available else "unavailable",{"queue_depth":self.ai.queue.qsize(),"error":event.error})
 
     async def handle_tick(self, tick: PriceTick) -> None:
+        self.trades.update(tick.instrument,tick.bid,tick.ask)
         before_realized=sum(p.realized_pnl for p in self.broker.positions.values())
         protective_updates=await self.broker.process_quote(tick)
         new_fills=self.broker.fills[self._persisted_fill_count:]
@@ -102,11 +105,14 @@ class FelineRuntime:
         self.database.persist_event(decision)
         if not decision.approved:
             return decision
-        before=sum(p.realized_pnl for p in self.broker.positions.values())
+        before=sum(p.realized_pnl for p in self.broker.positions.values());before_quantity=self.broker.positions.get(order.instrument).quantity if order.instrument in self.broker.positions else 0
         update = await self.broker.submit_order(order)
-        after=sum(p.realized_pnl for p in self.broker.positions.values())
-        if after != before:self.trade_pnls.append(after-before)
         new_fills=self.broker.fills[self._persisted_fill_count:]
+        after=sum(p.realized_pnl for p in self.broker.positions.values())
+        after_quantity=self.broker.positions.get(order.instrument).quantity if order.instrument in self.broker.positions else 0
+        if before_quantity==0 and after_quantity!=0 and new_fills:self.trades.start(order.instrument,"long" if after_quantity>0 else "short","reference","0.5.0",order.signal_id,new_fills[0].timestamp,abs(after_quantity),new_fills[0].fill_price)
+        elif before_quantity!=0 and after_quantity==0 and order.instrument in self.trades.open and new_fills:self.trades.close(order.instrument,new_fills[-1].timestamp,new_fills[-1].fill_price,ExitReason.STRATEGY,sum(f.commission+f.spread_cost+f.slippage_amount for f in new_fills))
+        if after != before:self.trade_pnls.append(after-before)
         self.database.commit_execution(self.broker,new_fills,[update])
         self._persisted_fill_count=len(self.broker.fills)
         return update

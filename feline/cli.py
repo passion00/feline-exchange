@@ -29,6 +29,7 @@ def parser() -> argparse.ArgumentParser:
     experiment=subs.add_parser("experiment");experiment.add_argument("dataset",type=Path);experiment.add_argument("--grid",type=Path,required=True);experiment.add_argument("--max-runs",type=int,default=16)
     walk=subs.add_parser("walk-forward");walk.add_argument("dataset",type=Path);walk.add_argument("--train",type=int,required=True);walk.add_argument("--test",type=int,required=True)
     subs.add_parser("doctor")
+    subs.add_parser("gui")
     return result
 
 
@@ -50,6 +51,9 @@ def main() -> None:
     if args.command=="doctor":
         from feline.storage.database import Database
         db=Database(Path(config.database_path));report=db.integrity_report();db.close();print(json.dumps(report,indent=2));raise SystemExit(0 if report["ok"] else 1)
+    if args.command=="gui":
+        from feline.gui.app import run_gui
+        run_gui();return
     if stop_file.exists():
         raise SystemExit("Emergency stop is active (data/EMERGENCY_STOP).")
     if args.command in {"experiment","walk-forward"}:
@@ -82,7 +86,7 @@ def main() -> None:
         finally:
             await runtime.stop()
             runtime.database.close()
-    print("Feline Exchange v0.3 starting in PAPER/RESEARCH mode (no live broker exists).")
+    print("Feline Exchange v0.5 starting in PAPER/RESEARCH mode (no live broker exists).")
     asyncio.run(execute())
     if args.command=="replay":
         costs=runtime.broker.portfolio_state();costs["turnover"]=sum(f.gross_value for f in runtime.broker.fills)

@@ -28,5 +28,6 @@ MIGRATIONS: tuple[str, ...] = (
     CREATE TABLE IF NOT EXISTS pending_orders (order_id TEXT PRIMARY KEY,state TEXT NOT NULL,remaining_quantity REAL NOT NULL,payload TEXT NOT NULL,updated_at TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS experiments (experiment_id TEXT PRIMARY KEY,status TEXT NOT NULL,created_at TEXT NOT NULL,payload TEXT NOT NULL,result TEXT,error TEXT);
     CREATE TABLE IF NOT EXISTS walk_forward_windows (id INTEGER PRIMARY KEY AUTOINCREMENT,experiment_id TEXT NOT NULL,train_start TEXT,train_end TEXT,test_start TEXT,test_end TEXT,result TEXT);
+    CREATE TABLE IF NOT EXISTS trades (trade_id TEXT PRIMARY KEY,instrument TEXT NOT NULL,status TEXT NOT NULL,entry_time TEXT NOT NULL,exit_time TEXT,payload TEXT NOT NULL);
     """,
 )

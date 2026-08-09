@@ -1,6 +1,10 @@
-# Feline Exchange v0.4 — Transaction Integrity, Trade Lifecycle + Experimental Validation
+# Feline Exchange v0.5 — Macro Event Research + Desktop Observer
 
-Feline Exchange is a local-first observer, deterministic execution/replay simulator, and research platform. Version 0.4 remains paper/research only.
+Feline Exchange is a local-first observer, deterministic execution/replay simulator, and research platform. Version 0.5 remains paper/research only.
+
+v0.5 studies EUR/USD after Fed/ECB-style shocks, deliberately avoiding the initial announcement race. It models deterministic pre-event, announcement, shock, stabilization, post-event, and complete phases; research decisions classify continuation, mean reversion, or explicit NO_TRADE.
+
+Launch the local Tk desktop observer with `python3 -m feline gui`. It is marked PAPER / RESEARCH ONLY. The GUI is a thin read-only projection over core state and contains no trading or risk logic. Replay selection and deliberate-confirmation emergency stop are available; a display server is required.
 
 Execution persistence uses one SQLite `BEGIN IMMEDIATE` boundary for order state, idempotent fills, cash, positions, remaining quantities, and protective state. `python3 -m feline doctor` performs read-only integrity diagnostics.
 
