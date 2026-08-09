@@ -19,3 +19,7 @@ Synthetic stress scenarios include five-percent FX moves, spread widening, liqui
 The initial hypothesis compares continuation with mean reversion after Fed/ECB-style volatility begins stabilizing. Deterministic shock intensity uses return magnitude, spread, and velocity. Stabilization requires configurable declining intensity and consecutive stable observations. Strategies abstain during shock or excessive spread. Event measurements support configurable 1/5/15/30/60-minute horizons even when no trade occurs. AI classification is optional counterfactual context and never controls danger mode or submits orders.
 
 Mixed JSONL replay stores timestamped price and normalized economic records and is globally ordered before delivery. Synthetic fixtures are not proprietary observations.
+
+## Qt workstation
+
+PySide6 and pyqtgraph are declared project dependencies. Qt owns rendering only; a dedicated controller thread owns an asyncio loop for core/replay tasks. Chart and event buffers are bounded. AI Opinion, strategy signal, and deterministic risk decision are separate surfaces. Emergency stop writes the same persistent core marker after confirmation; it cannot clear or weaken risk. Manual KDE validation: install editable, run `python3 -m feline gui`, open the Fed JSONL fixture, select a slow speed, verify resizing/zoom/pan/pause, then confirm emergency-stop behavior.
