@@ -25,3 +25,8 @@ class Position:
             self.average_price = price
         return pnl
 
+    def market_value(self, price: float) -> float:
+        return self.quantity * price
+
+    def unrealized(self, price: float) -> float:
+        return self.quantity * (price - self.average_price)

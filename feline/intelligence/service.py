@@ -4,6 +4,8 @@ import asyncio
 from dataclasses import dataclass
 import inspect
 import json
+import heapq
+from enum import IntEnum
 from typing import Protocol
 from urllib import request as urlrequest
 from uuid import uuid4
@@ -16,10 +18,16 @@ from feline.core.events import AIAnalysisResult, NewsEvent
 class AnalysisJob:
     event: NewsEvent
     id: str = ""
+    priority: "JobPriority" = None
 
     def __post_init__(self) -> None:
         if not self.id:
             object.__setattr__(self, "id", str(uuid4()))
+        if self.priority is None: object.__setattr__(self,"priority",JobPriority.NORMAL)
+
+
+class JobPriority(IntEnum):
+    CRITICAL=0; HIGH=1; NORMAL=2; LOW=3
 
 
 class AnalysisClient(Protocol):
@@ -62,8 +70,10 @@ class LlamaCppClient:
 class AIWorker:
     def __init__(self, config: AIConfig, client: AnalysisClient, on_result) -> None:
         self.config, self.client, self.on_result = config, client, on_result
-        self.queue: asyncio.Queue[AnalysisJob | None] = asyncio.Queue(maxsize=config.queue_size)
+        self.queue: asyncio.PriorityQueue = asyncio.PriorityQueue(maxsize=config.queue_size)
         self.task: asyncio.Task | None = None
+        self.sequence=0; self.dropped=0
+        self.last_available: bool | None = None
 
     def start(self) -> None:
         if self.task is None:
@@ -73,14 +83,19 @@ class AIWorker:
         if not self.config.enabled:
             return False
         try:
-            self.queue.put_nowait(job)
+            self.sequence+=1; self.queue.put_nowait((int(job.priority),self.sequence,job))
             return True
         except asyncio.QueueFull:
-            return False
+            if job.priority <= JobPriority.HIGH and self.queue._queue:
+                worst=max(self.queue._queue,key=lambda item:(item[0],item[1]))
+                if worst[0] > int(job.priority):
+                    self.queue._queue.remove(worst);heapq.heapify(self.queue._queue);self.queue.task_done()
+                    self.sequence+=1;self.queue.put_nowait((int(job.priority),self.sequence,job));self.dropped+=1;return True
+            self.dropped+=1;return False
 
     async def _run(self) -> None:
         while True:
-            job = await self.queue.get()
+            _,_,job = await self.queue.get()
             if job is None:
                 return
             try:
@@ -89,6 +104,7 @@ class AIWorker:
             except Exception as exc:
                 instrument = job.event.instruments[0] if job.event.instruments else "UNKNOWN"
                 result = AIAnalysisResult(job_id=job.id, instrument=instrument, event_type="unavailable", direction="neutral", importance=0, confidence=0, time_horizon="unknown", summary="AI analysis unavailable", evidence=(), available=False, error=type(exc).__name__)
+            self.last_available=result.available
             callback_result = self.on_result(result)
             if inspect.isawaitable(callback_result):
                 await callback_result
@@ -96,6 +112,6 @@ class AIWorker:
 
     async def stop(self) -> None:
         if self.task:
-            await self.queue.put(None)
+            self.sequence+=1; await self.queue.put((99,self.sequence,None))
             await self.task
             self.task = None

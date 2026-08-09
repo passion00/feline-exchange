@@ -15,5 +15,10 @@ MIGRATIONS: tuple[str, ...] = (
     CREATE INDEX IF NOT EXISTS idx_orders_request ON paper_orders(request_id);
     CREATE INDEX IF NOT EXISTS idx_risk_request ON risk_events(order_request_id);
     """,
+    """
+    CREATE TABLE IF NOT EXISTS candles (id TEXT PRIMARY KEY, instrument TEXT NOT NULL, timeframe TEXT NOT NULL, open_time TEXT NOT NULL, close_time TEXT NOT NULL, payload TEXT NOT NULL, UNIQUE(instrument,timeframe,open_time));
+    CREATE TABLE IF NOT EXISTS regime_events (id TEXT PRIMARY KEY, timestamp TEXT NOT NULL, instrument TEXT NOT NULL, previous TEXT NOT NULL, current TEXT NOT NULL, payload TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS news_dedup (fingerprint TEXT PRIMARY KEY, first_seen TEXT NOT NULL, event_id TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS health_state (component TEXT PRIMARY KEY, status TEXT NOT NULL, updated_at TEXT NOT NULL, details TEXT NOT NULL);
+    """,
 )
-

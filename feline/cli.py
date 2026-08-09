@@ -2,11 +2,14 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import json
 from pathlib import Path
 
 from feline.config import load_config
 from feline.logging_setup import configure_logging
 from feline.runtime import FelineRuntime
+from feline.replay.engine import CSVReplayProvider
+from feline.replay.report import calculate_report
 
 
 def parser() -> argparse.ArgumentParser:
@@ -19,6 +22,8 @@ def parser() -> argparse.ArgumentParser:
     paper = subs.add_parser("paper")
     paper.add_argument("--duration", type=float)
     subs.add_parser("stop", help="activate the persistent emergency-stop marker")
+    replay=subs.add_parser("replay")
+    replay.add_argument("csv",type=Path); replay.add_argument("--speed",default="max"); replay.add_argument("--strategy",default="reference",choices=["reference"]); replay.add_argument("--seed",type=int,default=0); replay.add_argument("--report",type=Path)
     return result
 
 
@@ -33,21 +38,28 @@ def main() -> None:
         print("Emergency stop activated; new runtime starts are blocked.")
         return
     if args.command == "status":
-        print(f"mode={config.mode} emergency_stop={stop_file.exists()} database={config.database_path}")
+        from feline.storage.database import Database
+        db=Database(Path(config.database_path)); health=db.health(); db.close()
+        print(json.dumps({"mode":config.mode,"emergency_stop":stop_file.exists(),"database":config.database_path,"health":health},indent=2))
         return
     if stop_file.exists():
         raise SystemExit("Emergency stop is active (data/EMERGENCY_STOP).")
-    runtime = FelineRuntime(config)
+    provider=CSVReplayProvider(args.csv,args.speed,args.seed) if args.command=="replay" else None
+    runtime = FelineRuntime(config,provider=provider,recover=args.command!="replay")
     async def execute() -> None:
         try:
-            await runtime.run(args.duration)
+            await runtime.run(getattr(args,"duration",None))
         finally:
             await runtime.stop()
             runtime.database.close()
-    print("Feline Exchange v0.1 starting in PAPER mode (no live broker exists).")
+    print("Feline Exchange v0.2 starting in PAPER mode (no live broker exists).")
     asyncio.run(execute())
+    if args.command=="replay":
+        report=calculate_report(config.paper.initial_cash,runtime.equity_history,runtime.trade_pnls,runtime.exposure_samples,runtime.tick_count)
+        encoded=json.dumps(report.to_dict(),indent=2)
+        if args.report: args.report.write_text(encoded+"\n",encoding="utf-8")
+        print(encoded)
 
 
 if __name__ == "__main__":
     main()
-

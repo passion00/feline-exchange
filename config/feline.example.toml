@@ -2,10 +2,12 @@ mode = "paper"
 database_path = "data/feline.db"
 log_directory = "logs"
 tick_interval_seconds = 0.25
+snapshot_interval_ticks = 20
 
 [paper]
 initial_cash = 100000.0
 slippage_bps = 1.0
+volatility_slippage_multiplier = 5.0
 
 [risk]
 max_position_size = 100.0
@@ -16,6 +18,11 @@ max_drawdown = 0.10
 max_allowed_spread = 0.01
 emergency_volatility_threshold = 0.10
 trading_enabled = true
+event_minutes_before = 30.0
+event_minutes_after = 30.0
+event_position_factor = 0.25
+event_exposure_factor = 0.25
+event_block_new_positions = true
 
 [ai]
 enabled = true
@@ -24,3 +31,10 @@ model = "llmware/qwen3-4b-instruct-gguf:Q4_K_M"
 request_timeout_seconds = 30.0
 queue_size = 32
 
+[strategy]
+enabled = true
+fast_period = 3
+slow_period = 5
+atr_period = 3
+risk_fraction = 0.002
+max_signal_quantity = 10.0

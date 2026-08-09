@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from feline.config import RiskConfig
 from feline.core.events import OrderRequest, PriceTick, RiskEvent
 from feline.portfolio.models import Position
+from .danger import EventDangerMode
 
 
 @dataclass(frozen=True)
@@ -22,6 +23,7 @@ class RiskEngine:
         self.kill_switch = False
         self.trading_enabled = config.trading_enabled
         self.state = RiskState()
+        self.danger = EventDangerMode(config)
 
     def activate_kill_switch(self) -> None:
         self.kill_switch = True
@@ -50,17 +52,24 @@ class RiskEngine:
             return reject("kill_switch", "Global kill switch is active", "emergency")
         if not self.trading_enabled:
             return reject("trading_disabled", "New trades are disabled")
+        danger = self.danger.active(request.timestamp)
+        current_quantity = positions.get(request.instrument, Position(request.instrument)).quantity
+        is_increasing = current_quantity == 0 or current_quantity * (request.quantity if request.side.value == "buy" else -request.quantity) > 0
+        if danger and self.config.event_block_new_positions and is_increasing:
+            return reject("event_danger", "Scheduled high-risk event window blocks new exposure", "high")
         if quote is None:
             return reject("quote", "No current quote")
         if quote.spread_ratio > self.config.max_allowed_spread:
             return reject("spread", "Spread exceeds configured maximum")
         signed = request.quantity if request.side.value == "buy" else -request.quantity
         resulting = positions.get(request.instrument, Position(request.instrument)).quantity + signed
-        if abs(resulting) > self.config.max_position_size:
+        position_limit = self.config.max_position_size * (self.config.event_position_factor if danger else 1.0)
+        if abs(resulting) > position_limit:
             return reject("position_size", "Resulting position exceeds maximum")
         exposure = sum(abs(p.quantity * (quote.mid if p.instrument == request.instrument else p.average_price)) for p in positions.values())
         exposure += abs(signed * quote.mid)
-        if exposure > self.config.max_total_exposure:
+        exposure_limit = self.config.max_total_exposure * (self.config.event_exposure_factor if danger else 1.0)
+        if exposure > exposure_limit:
             return reject("total_exposure", "Total exposure exceeds maximum")
         if request.stop_price is None:
             return reject("stop_required", "Every new order requires a stop price")
@@ -68,4 +77,3 @@ class RiskEngine:
         if estimated_loss > self.config.max_loss_per_trade:
             return reject("loss_per_trade", "Estimated trade loss exceeds maximum")
         return RiskEvent(approved=True, rule="approved", message="All deterministic risk checks passed", order_request_id=request.id, correlation_id=request.correlation_id)
-

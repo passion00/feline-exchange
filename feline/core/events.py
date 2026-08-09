@@ -21,6 +21,21 @@ class OrderStatus(str, Enum):
     FILLED = "filled"
     CANCELLED = "cancelled"
     REJECTED = "rejected"
+    TRIGGERED = "triggered"
+
+
+class OrderType(str, Enum):
+    MARKET = "market"
+    LIMIT = "limit"
+
+
+class Regime(str, Enum):
+    INSUFFICIENT_DATA = "insufficient_data"
+    NORMAL = "normal"
+    TRENDING = "trending"
+    HIGH_VOLATILITY = "high_volatility"
+    EXTREME_VOLATILITY = "extreme_volatility"
+    ILLIQUID = "illiquid"
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -30,12 +45,13 @@ class Event:
     correlation_id: str | None = None
 
     def payload(self) -> dict[str, Any]:
-        value = asdict(self)
-        value["timestamp"] = self.timestamp.isoformat()
-        for key, item in list(value.items()):
-            if isinstance(item, Enum):
-                value[key] = item.value
-        return value
+        def encode(item: Any) -> Any:
+            if isinstance(item, datetime): return item.isoformat()
+            if isinstance(item, Enum): return item.value
+            if isinstance(item, dict): return {key: encode(value) for key,value in item.items()}
+            if isinstance(item, (list,tuple)): return [encode(value) for value in item]
+            return item
+        return encode(asdict(self))
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -44,6 +60,7 @@ class PriceTick(Event):
     bid: float
     ask: float
     volume: float = 0.0
+    source: str = "unknown"
 
     @property
     def mid(self) -> float:
@@ -57,11 +74,17 @@ class PriceTick(Event):
 @dataclass(frozen=True, kw_only=True)
 class CandleUpdate(Event):
     instrument: str
+    timeframe: str
+    open_time: datetime
+    close_time: datetime
     open: float
     high: float
     low: float
     close: float
     volume: float
+    tick_count: int = 0
+    source: str = "unknown"
+    complete: bool = True
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -78,6 +101,9 @@ class EconomicEvent(Event):
     actual: float | None = None
     forecast: float | None = None
     currency: str | None = None
+    scheduled_at: datetime | None = None
+    importance: str = "normal"
+    event_type: str = "other"
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -87,6 +113,10 @@ class SignalEvent(Event):
     strength: float
     strategy: str
     price: float
+    indicators: dict[str, float | None] = field(default_factory=dict)
+    regime: str = "unknown"
+    reason: str = ""
+    strategy_version: str = "unknown"
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -97,6 +127,9 @@ class OrderRequest(Event):
     expected_price: float
     stop_price: float | None = None
     signal_id: str | None = None
+    take_profit_price: float | None = None
+    order_type: OrderType = OrderType.MARKET
+    limit_price: float | None = None
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -134,6 +167,27 @@ class EmergencyEvent(Event):
 
 
 @dataclass(frozen=True, kw_only=True)
+class RegimeEvent(Event):
+    instrument: str
+    previous: Regime
+    current: Regime
+    metrics: dict[str, float]
+
+
+@dataclass(frozen=True, kw_only=True)
+class PortfolioSnapshot(Event):
+    cash: float
+    equity: float
+    realized_pnl: float
+    unrealized_pnl: float
+    exposure: float
+    peak_equity: float
+    drawdown: float
+    trading_state: str
+    positions: dict[str, dict[str, float]]
+
+
+@dataclass(frozen=True, kw_only=True)
 class AIAnalysisResult(Event):
     job_id: str
     instrument: str
@@ -146,4 +200,3 @@ class AIAnalysisResult(Event):
     evidence: tuple[str, ...]
     available: bool = True
     error: str | None = None
-
