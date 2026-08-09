@@ -34,7 +34,7 @@ def parser() -> argparse.ArgumentParser:
     importer.add_argument("input",type=Path);importer.add_argument("output",type=Path);importer.add_argument("--instrument",required=True);importer.add_argument("--interval",default="1min",choices=["1min","5min","15min","1h"]);importer.add_argument("--timezone",default="UTC")
     macro_merge=subs.add_parser("add-macro-event",help="merge a scheduled economic event into replay JSONL")
     macro_merge.add_argument("input",type=Path);macro_merge.add_argument("output",type=Path);macro_merge.add_argument("--timestamp",required=True);macro_merge.add_argument("--event-id",required=True);macro_merge.add_argument("--title",required=True);macro_merge.add_argument("--source",default="federal_reserve");macro_merge.add_argument("--region",default="US");macro_merge.add_argument("--instrument",default="EURUSD")
-    research=subs.add_parser("research",help="historical macro research catalog and batch tools");research.add_argument("action",choices=["validate","inspect","run","summarize","import-directory"]);research.add_argument("paths",type=Path,nargs="+");research.add_argument("--instrument",default="EURUSD");research.add_argument("--interval",default="1min");research.add_argument("--timezone",default="UTC");research.add_argument("--output-root",type=Path,default=Path("data/reports/research"));research.add_argument("--fail-fast",action="store_true")
+    research=subs.add_parser("research",help="historical macro research catalog and batch tools");research.add_argument("action",choices=["validate","inspect","run","summarize","import-directory","corpus","compare"]);research.add_argument("paths",type=Path,nargs="*");research.add_argument("--instrument",default="EURUSD");research.add_argument("--interval",default="1min");research.add_argument("--timezone",default="UTC");research.add_argument("--output-root",type=Path,default=Path("data/reports/research"));research.add_argument("--fail-fast",action="store_true");research.add_argument("--central-bank",default="FOMC",choices=["FOMC"]);research.add_argument("--years",type=int,nargs="+");research.add_argument("--provider",default="twelvedata",choices=["twelvedata"]);research.add_argument("--run",action="store_true");research.add_argument("--dry-run",action="store_true");research.add_argument("--force-download",action="store_true");research.add_argument("--skip-download",action="store_true")
     return result
 
 
@@ -66,7 +66,19 @@ def main() -> None:
         from feline.replay.twelvedata import add_economic_event
         count=add_economic_event(args.input,args.output,args.timestamp,args.event_id,args.title,args.source,args.region,args.instrument);print(json.dumps({"events":count,"output":str(args.output)},indent=2));return
     if args.command=="research":
-        if args.action=="validate":
+        if args.action=="corpus":
+            if not args.paths or str(args.paths[0]) not in {"build","doctor"}:raise SystemExit("research corpus requires build or doctor")
+            if not args.years:raise SystemExit("research corpus requires --years")
+            if str(args.paths[0])=="doctor":
+                from feline.research.corpus import corpus_doctor
+                result=corpus_doctor(args.years,args.instrument);print(json.dumps(result,indent=2));raise SystemExit(0 if result["ok"] else 1)
+            from feline.research.corpus import build_corpus
+            result=build_corpus(args.years,args.instrument,args.provider,args.run,args.dry_run,args.force_download,args.skip_download,config=config)
+        elif args.action=="compare":
+            if len(args.paths)<2:raise SystemExit("research compare requires at least two experiment paths")
+            from feline.research.compare import compare_experiments
+            result=compare_experiments(args.paths)
+        elif args.action=="validate":
             from feline.research.engine import validate_manifest
             result=validate_manifest(args.paths[0])
         elif args.action=="inspect":
@@ -120,7 +132,7 @@ def main() -> None:
         finally:
             await runtime.stop()
             runtime.database.close()
-    print("Feline Exchange v0.9.1 starting in PAPER/RESEARCH mode (no live broker exists).")
+    print("Feline Exchange v0.9.2 starting in PAPER/RESEARCH mode (no live broker exists).")
     asyncio.run(execute())
 
 

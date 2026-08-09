@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "feline-exchange"
-version = "0.9.1"
+version = "0.9.2"
 description = "Local market observer and deterministic paper trader"
 requires-python = ">=3.11"
 dependencies = ["PySide6>=6.7,<7", "pyqtgraph>=0.13,<1"]

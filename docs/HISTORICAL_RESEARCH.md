@@ -54,3 +54,21 @@ python3 -m feline research summarize data/reports/research/EXPERIMENT_ID
 ```
 
 Downloaded market data and provider credentials are never committed. Review provider licensing before storing, sharing, or redistributing captures.
+
+## Corpus automation
+
+The corpus builder separates mechanical data preparation from outcome research. Without `--run` it only acquires, validates, converts and validates a manifest; it never runs or summarizes an experiment. Twelve Data credentials come only from `FELINE_TWELVE_DATA_API_KEY` and are never written to artifacts or logs.
+
+```bash
+export FELINE_TWELVE_DATA_API_KEY=your_key_here
+python3 -m feline research corpus build --central-bank FOMC --years 2023 --instrument EURUSD --provider twelvedata
+python3 -m feline research corpus build --central-bank FOMC --years 2023 --instrument EURUSD --provider twelvedata --run
+python3 -m feline research corpus doctor --years 2022 2024 --instrument EURUSD
+python3 -m feline research compare data/reports/research/EXPERIMENT_A data/reports/research/EXPERIMENT_B
+```
+
+`--dry-run` reports missing acquisitions without writes. `--skip-download` validates and converts local raw files without network access. `--force-download` explicitly refetches and preserves the prior raw file under a checksum-named backup.
+
+Raw quality checks use Decimal OHLC validation, duplicate detection, non-positive-price checks and exact one-minute gaps. One bounded recheck distinguishes transient from persistent provider gaps. Persistent gaps within announcement −5m through +30m quarantine the event; gaps outside that interval remain visible as `persistent_noncritical_gap`. Provider OHLC anomalies are preserved for operator review and never silently repaired.
+
+Each year receives `data_quality.json` and a v0.9.1-compatible manifest. Corpus doctor is read-only. Experiment comparison reads existing artifacts and adds direction-normalized clean post-stabilization 5m/15m returns solely as reporting metrics: positive means movement with the initial shock and negative means reversal. Mechanical quality status is not a strategy outcome and does not imply profitability.
