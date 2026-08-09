@@ -6,8 +6,8 @@ import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 from urllib import parse, request
 
-from feline.core.events import NewsEvent,PriceTick
-from .providers import MarketDataProvider,NewsProvider
+from feline.core.events import EconomicEvent,NewsEvent,PriceTick
+from .providers import EconomicCalendarProvider,MarketDataProvider,NewsProvider
 
 
 class AlphaVantageFXProvider(MarketDataProvider):
@@ -67,3 +67,10 @@ class RSSNewsProvider(NewsProvider):
 class ECBNewsProvider(RSSNewsProvider):
     def __init__(self,poll_interval:float=300,retries:int=3) -> None:
         super().__init__("https://www.ecb.europa.eu/rss/press.html","ecb",poll_interval,retries)
+
+
+class StaticEconomicCalendarProvider(EconomicCalendarProvider):
+    """Offline/research adapter for operator-supplied official calendar exports."""
+    def __init__(self,events:list[EconomicEvent])->None:self.events=sorted(events,key=lambda e:e.scheduled_at or e.timestamp)
+    async def stream(self):
+        for event in self.events:yield event

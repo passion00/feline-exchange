@@ -1,6 +1,8 @@
-# Feline Exchange v0.2 — Market Observer, Replay Engine + Advanced Paper Trader
+# Feline Exchange v0.4 — Transaction Integrity, Trade Lifecycle + Experimental Validation
 
-Feline Exchange is a local-first market observer, deterministic replay engine, and quantitative paper trader. Version 0.2 cannot submit real orders: the only broker is `PaperBroker`, and configuration rejects every mode except `paper`.
+Feline Exchange is a local-first observer, deterministic execution/replay simulator, and research platform. Version 0.4 remains paper/research only.
+
+Execution persistence uses one SQLite `BEGIN IMMEDIATE` boundary for order state, idempotent fills, cash, positions, remaining quantities, and protective state. `python3 -m feline doctor` performs read-only integrity diagnostics.
 
 ## Three-speed architecture
 
@@ -64,13 +66,33 @@ The schema also stores candles, regime transitions, health state, positions, and
 
 ## Paper execution assumptions
 
-Market buys fill from ask and sells from bid, plus directional configured slippage. Stops and targets are checked on incoming quotes. A gap fills at the observed executable side plus adverse slippage—not the requested stop. Extreme regimes multiply slippage. Fills are currently complete and immediate; latency, commissions, financing, queue priority, partial fills, and full limit-order simulation are not yet modeled. `OrderType.LIMIT` reserves the interface but is not simulated.
+Market buys execute against ask and sells against bid. Market, limit, stop and stop-limit requests have accepted, partial, filled, cancelled, rejected and expired states. Quote arrival drives execution, so fixed or seeded-variable latency lets prices move before filling. Synthetic liquidity may split orders across quotes. This is an approximation, not an exchange order book.
+
+Every fill records reference/fill price, spread, slippage, commission, latency and assumptions. Costs support flat, notional percentage, per-unit and minimum commissions. Generic FX financing supports long/short daily rates and triple-day rules. Defaults do not represent a specific broker.
+
+Cash, positions, pending limits, remaining quantities and protective stop/take-profit prices are atomically persisted and restored. Replay end policies are `MARK_TO_MARKET`, `FORCE_CLOSE`, and `LEAVE_OPEN`; force-close uses simulated market orders and their costs.
+
+Candle gaps support `SKIP` (default), `FORWARD_FILL` (last OHLC, zero volume/ticks) and `EMPTY_CANDLE` (same conservative numeric convention, zero volume/ticks). FX 24/5 and timezone/holiday-aware exchange calendar foundations are included.
 
 Scheduled high/critical economic events create configurable before/after danger windows. New exposure can be blocked and position/exposure limits reduced. Post-event stabilization is represented by the after-window. AI results never affect this gate.
 
 ## Replay report limitations
 
 Reports include return, realized P/L, trade counts, win/loss metrics, profit factor, drawdown, exposure time, return volatility, and a Sharpe-like sample metric. The Sharpe-like value is not annualized to a market calendar and has no risk-free-rate adjustment. Results inherit synthetic tick granularity, full-fill assumptions, and the configured paper slippage model.
+
+v0.3 also itemizes gross/net P/L, commissions, spread, slippage, financing, expectancy, turnover, streaks and Sortino-like results. MAE/MFE and seeded trade-resampling utilities are research aids, not guarantees.
+
+Research commands:
+
+```bash
+python3 -m feline replay tests/fixtures/multi_ticks.csv --speed max --seed 7
+python3 -m feline experiment tests/fixtures/sample_ticks.csv --grid config/experiment-grid.example.toml --max-runs 8
+python3 -m feline walk-forward tests/fixtures/sample_ticks.csv --train 6 --test 3
+```
+
+Provider TOML names credential environment variables only. Never place values in TOML. Providers use independent tasks and bounded queues. The optional metrics server binds `127.0.0.1`, accepts GET only, and exposes no controls.
+
+**Simulation warning:** paper/backtest results do not predict or guarantee real-world profitability. The model lacks a real order book, venue queue position, hidden liquidity, and broker-specific rules.
 
 ## Tests
 

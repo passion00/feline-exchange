@@ -1,0 +1,4 @@
+[grid]
+fast_period = [2, 3]
+slow_period = [5, 8]
+risk_fraction = [0.001, 0.002]

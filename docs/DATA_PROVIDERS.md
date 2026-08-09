@@ -20,3 +20,5 @@ Prefer issuer, regulator, exchange, and central-bank feeds for authoritative eve
 ## Adapter policy
 
 Adapters must be read-only, use bounded timeouts and retry counts, expose failure through health state, and terminate or back off rather than retrying forever at high frequency. Data API keys are operator configuration—not brokerage credentials—and must never be logged, committed, persisted in event payloads, or sent to the LLM.
+
+Provider configuration references credential environment-variable names only. Captured provider content remains subject to source and exchange storage/replay licensing.

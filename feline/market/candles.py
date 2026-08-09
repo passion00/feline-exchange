@@ -4,6 +4,9 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
 from feline.core.events import CandleUpdate, PriceTick
+from enum import Enum
+
+class GapPolicy(str,Enum):SKIP="skip";FORWARD_FILL="forward_fill";EMPTY_CANDLE="empty_candle"
 
 
 TIMEFRAMES = {"1m": 60, "5m": 300, "15m": 900, "1h": 3600}
@@ -46,10 +49,11 @@ class _BuildingCandle:
 class CandleAggregator:
     """Streaming UTC candle builder; duplicate tick IDs are ignored."""
 
-    def __init__(self, timeframes: tuple[str, ...] = ("1m", "5m", "15m", "1h")) -> None:
+    def __init__(self, timeframes: tuple[str, ...] = ("1m", "5m", "15m", "1h"),gap_policy:GapPolicy=GapPolicy.SKIP) -> None:
         self.timeframes = timeframes
         self.active: dict[tuple[str, str], _BuildingCandle] = {}
         self.seen: set[str] = set()
+        self.gap_policy=gap_policy
 
     def update(self, tick: PriceTick) -> list[CandleUpdate]:
         if tick.id in self.seen:
@@ -66,6 +70,12 @@ class CandleAggregator:
             current = self.active.get(key)
             if current and start > current.open_time:
                 completed.append(current.event())
+                if self.gap_policy is not GapPolicy.SKIP:
+                    gap_start=current.close_time
+                    while gap_start<start:
+                        price=current.close
+                        completed.append(CandleUpdate(instrument=tick.instrument,timeframe=timeframe,open_time=gap_start,close_time=gap_start+timedelta(seconds=seconds),open=price,high=price,low=price,close=price,volume=0,tick_count=0,source=current.source,complete=True,timestamp=gap_start+timedelta(seconds=seconds)))
+                        gap_start+=timedelta(seconds=seconds)
                 current = None
             if current and start < current.open_time:
                 continue  # too late to revise an emitted candle

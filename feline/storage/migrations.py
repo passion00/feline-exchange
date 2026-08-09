@@ -21,4 +21,12 @@ MIGRATIONS: tuple[str, ...] = (
     CREATE TABLE IF NOT EXISTS news_dedup (fingerprint TEXT PRIMARY KEY, first_seen TEXT NOT NULL, event_id TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS health_state (component TEXT PRIMARY KEY, status TEXT NOT NULL, updated_at TEXT NOT NULL, details TEXT NOT NULL);
     """,
+    """
+    CREATE TABLE IF NOT EXISTS fills (id TEXT PRIMARY KEY,order_id TEXT NOT NULL,timestamp TEXT NOT NULL,instrument TEXT NOT NULL,quantity REAL NOT NULL,fill_price REAL NOT NULL,commission REAL NOT NULL,spread_cost REAL NOT NULL,slippage_cost REAL NOT NULL,payload TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS financing_charges (id TEXT PRIMARY KEY,timestamp TEXT NOT NULL,instrument TEXT NOT NULL,amount REAL NOT NULL,payload TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS broker_state (singleton INTEGER PRIMARY KEY CHECK(singleton=1),cash REAL NOT NULL,payload TEXT NOT NULL,updated_at TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS pending_orders (order_id TEXT PRIMARY KEY,state TEXT NOT NULL,remaining_quantity REAL NOT NULL,payload TEXT NOT NULL,updated_at TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS experiments (experiment_id TEXT PRIMARY KEY,status TEXT NOT NULL,created_at TEXT NOT NULL,payload TEXT NOT NULL,result TEXT,error TEXT);
+    CREATE TABLE IF NOT EXISTS walk_forward_windows (id INTEGER PRIMARY KEY AUTOINCREMENT,experiment_id TEXT NOT NULL,train_start TEXT,train_end TEXT,test_start TEXT,test_end TEXT,result TEXT);
+    """,
 )

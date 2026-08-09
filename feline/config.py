@@ -27,6 +27,18 @@ class PaperConfig:
     initial_cash: float = 100_000.0
     slippage_bps: float = 1.0
     volatility_slippage_multiplier: float = 5.0
+    spread_slippage_factor: float = 0.05
+    size_slippage_bps_per_unit: float = 0.0
+    fixed_latency_ms: float = 0.0
+    variable_latency_ms: float = 0.0
+    random_seed: int = 0
+    liquidity_fraction: float = 1.0
+    flat_commission: float = 0.0
+    percentage_commission: float = 0.0
+    per_unit_commission: float = 0.0
+    minimum_commission: float = 0.0
+    replay_end_policy: str = "MARK_TO_MARKET"
+    synthetic_spread_bps: float = 2.0
 
 
 @dataclass(frozen=True)
@@ -59,6 +71,7 @@ class AppConfig:
     ai: AIConfig = field(default_factory=AIConfig)
     strategy: StrategyConfig = field(default_factory=StrategyConfig)
     snapshot_interval_ticks: int = 20
+    providers: dict = field(default_factory=dict)
 
 
 def load_config(path: Path | None = None) -> AppConfig:
@@ -76,4 +89,5 @@ def load_config(path: Path | None = None) -> AppConfig:
         ai=AIConfig(**data.get("ai", {})),
         strategy=StrategyConfig(**data.get("strategy", {})),
         snapshot_interval_ticks=max(1, int(data.get("snapshot_interval_ticks", 20))),
+        providers=data.get("providers",{}),
     )

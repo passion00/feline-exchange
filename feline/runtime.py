@@ -6,7 +6,7 @@ from pathlib import Path
 
 from feline.config import AppConfig
 from feline.core.bus import EventBus
-from feline.core.events import AIAnalysisResult, CandleUpdate, EconomicEvent, EmergencyEvent, NewsEvent, OrderRequest, PortfolioSnapshot, PriceTick, Regime, RegimeEvent, SignalEvent
+from feline.core.events import AIAnalysisResult, CandleUpdate, EconomicEvent, EmergencyEvent,FillEvent,FinancingEvent, NewsEvent, OrderRequest, PortfolioSnapshot, PriceTick, Regime, RegimeEvent, SignalEvent
 from feline.execution.paper import PaperBroker
 from feline.intelligence.service import AIWorker, AnalysisJob, LlamaCppClient
 from feline.market.providers import MarketDataProvider, MockMarketDataProvider
@@ -18,13 +18,14 @@ from feline.quant.regime import RegimeDetector
 from feline.risk.engine import RiskEngine
 from feline.storage.database import Database
 from feline.strategy.reference import ReferenceStrategy
+from feline.portfolio.allocator import PortfolioAllocator
 
 
 class FelineRuntime:
     def __init__(self, config: AppConfig, provider: MarketDataProvider | None = None, ai_client=None, recover: bool = True) -> None:
         self.config = config
         self.bus = EventBus()
-        self.broker = PaperBroker(config.paper.initial_cash, config.paper.slippage_bps, config.paper.volatility_slippage_multiplier)
+        self.broker = PaperBroker(config=config.paper)
         self.risk = RiskEngine(config.risk)
         self.database = Database(Path(config.database_path))
         self.provider = provider or MockMarketDataProvider(config.tick_interval_seconds)
@@ -33,16 +34,18 @@ class FelineRuntime:
         self.candles = CandleAggregator()
         self.regimes = RegimeDetector()
         self.strategy = ReferenceStrategy(config.strategy)
+        self.allocator=PortfolioAllocator()
         self.news_pipeline = NewsPipeline()
         self.tick_count = 0
         self.peak_equity = config.paper.initial_cash
         self.equity_history: list[float] = []
         self.trade_pnls: list[float] = []
+        self._persisted_fill_count=0
         self.exposure_samples = 0
         self.emergency_stop_path = Path("data/EMERGENCY_STOP")
         self.running = False
         self.ai = AIWorker(config.ai, ai_client or LlamaCppClient(config.ai), self.bus.publish)
-        recovered = self.database.latest_portfolio()
+        recovered = self.database.recover_broker_state() or self.database.latest_portfolio()
         if recovered and recover: self.broker.restore(*recovered)
         self.database.save_health("database","ok",{})
         self.database.save_health("event_bus","ok",{"pending":0})
@@ -60,7 +63,9 @@ class FelineRuntime:
     async def handle_tick(self, tick: PriceTick) -> None:
         before_realized=sum(p.realized_pnl for p in self.broker.positions.values())
         protective_updates=await self.broker.process_quote(tick)
-        for update in protective_updates:self.database.persist_event(update)
+        new_fills=self.broker.fills[self._persisted_fill_count:]
+        if protective_updates or new_fills:self.database.commit_execution(self.broker,new_fills,protective_updates)
+        self._persisted_fill_count=len(self.broker.fills)
         after_realized=sum(p.realized_pnl for p in self.broker.positions.values())
         if after_realized != before_realized:self.trade_pnls.append(after_realized-before_realized)
         indicator = self.indicators.setdefault(tick.instrument, RollingReturns())
@@ -80,6 +85,7 @@ class FelineRuntime:
             if signal and self.config.strategy.enabled:
                 await self.bus.publish(signal)
                 portfolio=self.broker.portfolio_state(); quantity,stop,target=self.strategy.order_from_signal(signal,portfolio["equity"])
+                allocated=self.allocator.allocate(signal,portfolio["equity"],portfolio["cash"],portfolio["exposure"]);quantity=min(quantity,allocated)
                 order=OrderRequest(instrument=signal.instrument,side=signal.side,quantity=quantity,expected_price=signal.price,stop_price=stop,take_profit_price=target,signal_id=signal.id,correlation_id=signal.id,timestamp=signal.timestamp)
                 await self.request_order(order)
         self.tick_count+=1
@@ -100,7 +106,9 @@ class FelineRuntime:
         update = await self.broker.submit_order(order)
         after=sum(p.realized_pnl for p in self.broker.positions.values())
         if after != before:self.trade_pnls.append(after-before)
-        self.database.persist_event(update)
+        new_fills=self.broker.fills[self._persisted_fill_count:]
+        self.database.commit_execution(self.broker,new_fills,[update])
+        self._persisted_fill_count=len(self.broker.fills)
         return update
 
     def submit_news(self, event: NewsEvent) -> bool:
@@ -147,6 +155,7 @@ class FelineRuntime:
             await self.bus.drain()
             for candle in self.candles.flush(): self.database.persist_event(candle)
             self.snapshot()
+            self.database.persist_broker_state(self.broker)
             self.database.save_health("market_provider","disconnected",{})
 
     async def stop(self) -> None:
@@ -158,3 +167,13 @@ class FelineRuntime:
         self.database.save_health("ai",ai_status,{"queue_depth":self.ai.queue.qsize(),"dropped":self.ai.dropped})
         self.database.save_health("event_bus","ok",{"pending":len(self.bus._tasks)})
         self.database.save_health("paper_broker","ok",{"positions":len(self.broker.positions)})
+
+    async def finalize_replay(self,policy:str|None=None)->str:
+        policy=(policy or self.config.paper.replay_end_policy).upper()
+        if policy=="FORCE_CLOSE":
+            for instrument,p in list(self.broker.positions.items()):
+                if p.quantity:await self.broker.close_position(instrument)
+            for fill in self.broker.fills[self._persisted_fill_count:]:self.database.persist_event(fill)
+            self._persisted_fill_count=len(self.broker.fills);self.snapshot();self.database.persist_broker_state(self.broker)
+        elif policy not in {"MARK_TO_MARKET","LEAVE_OPEN"}:raise ValueError("invalid replay end policy")
+        return policy

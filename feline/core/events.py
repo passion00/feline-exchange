@@ -17,16 +17,22 @@ class Side(str, Enum):
 
 
 class OrderStatus(str, Enum):
+    NEW = "new"
+    ACCEPTED = "accepted"
+    PARTIALLY_FILLED = "partially_filled"
     PENDING = "pending"
     FILLED = "filled"
     CANCELLED = "cancelled"
     REJECTED = "rejected"
     TRIGGERED = "triggered"
+    EXPIRED = "expired"
 
 
 class OrderType(str, Enum):
     MARKET = "market"
     LIMIT = "limit"
+    STOP = "stop"
+    STOP_LIMIT = "stop_limit"
 
 
 class Regime(str, Enum):
@@ -130,6 +136,7 @@ class OrderRequest(Event):
     take_profit_price: float | None = None
     order_type: OrderType = OrderType.MARKET
     limit_price: float | None = None
+    expires_at: datetime | None = None
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -141,6 +148,34 @@ class OrderUpdate(Event):
     status: OrderStatus
     fill_price: float | None = None
     reason: str | None = None
+    filled_quantity: float = 0.0
+    remaining_quantity: float = 0.0
+
+
+@dataclass(frozen=True, kw_only=True)
+class FillEvent(Event):
+    order_id: str
+    instrument: str
+    side: Side
+    quantity: float
+    reference_price: float
+    fill_price: float
+    gross_value: float
+    commission: float
+    spread_cost: float
+    slippage_amount: float
+    slippage_percentage: float
+    latency_ms: float
+    assumptions: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True, kw_only=True)
+class FinancingEvent(Event):
+    instrument: str
+    quantity: float
+    days: int
+    rate: float
+    amount: float
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -200,3 +235,9 @@ class AIAnalysisResult(Event):
     evidence: tuple[str, ...]
     available: bool = True
     error: str | None = None
+    origin_event_ids: tuple[str, ...] = ()
+    normalized_source: str | None = None
+    publication_timestamp: datetime | None = None
+    ingestion_timestamp: datetime | None = None
+    model_identifier: str | None = None
+    prompt_schema_version: str = "financial-news-v1"

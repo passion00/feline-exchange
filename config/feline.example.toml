@@ -4,10 +4,33 @@ log_directory = "logs"
 tick_interval_seconds = 0.25
 snapshot_interval_ticks = 20
 
+[providers.alpha_vantage]
+enabled = false
+credential_env = "FELINE_ALPHA_VANTAGE_API_KEY"
+queue_size = 128
+max_retries = 3
+
+[providers.ecb_news]
+enabled = false
+queue_size = 128
+max_retries = 3
+
 [paper]
 initial_cash = 100000.0
 slippage_bps = 1.0
 volatility_slippage_multiplier = 5.0
+spread_slippage_factor = 0.05
+size_slippage_bps_per_unit = 0.0
+fixed_latency_ms = 0.0
+variable_latency_ms = 0.0
+random_seed = 0
+liquidity_fraction = 1.0
+flat_commission = 0.0
+percentage_commission = 0.0
+per_unit_commission = 0.0
+minimum_commission = 0.0
+replay_end_policy = "MARK_TO_MARKET"
+synthetic_spread_bps = 2.0
 
 [risk]
 max_position_size = 100.0

@@ -11,7 +11,7 @@ from urllib import request as urlrequest
 from uuid import uuid4
 
 from feline.config import AIConfig
-from feline.core.events import AIAnalysisResult, NewsEvent
+from feline.core.events import AIAnalysisResult, NewsEvent,utc_now
 
 
 @dataclass(frozen=True)
@@ -19,6 +19,7 @@ class AnalysisJob:
     event: NewsEvent
     id: str = ""
     priority: "JobPriority" = None
+    model_identifier:str|None=None
 
     def __post_init__(self) -> None:
         if not self.id:
@@ -43,7 +44,7 @@ def validate_analysis(data: dict, job: AnalysisJob) -> AIAnalysisResult:
     importance, confidence = float(data["importance"]), float(data["confidence"])
     if not (0 <= importance <= 1 and 0 <= confidence <= 1) or not isinstance(data["evidence"], list):
         raise ValueError("Invalid scores or evidence")
-    return AIAnalysisResult(job_id=job.id, instrument=str(data["instrument"]), event_type=str(data["event_type"]), direction=data["direction"], importance=importance, confidence=confidence, time_horizon=str(data["time_horizon"]), summary=str(data["summary"]), evidence=tuple(map(str, data["evidence"])))
+    return AIAnalysisResult(job_id=job.id, instrument=str(data["instrument"]), event_type=str(data["event_type"]), direction=data["direction"], importance=importance, confidence=confidence, time_horizon=str(data["time_horizon"]), summary=str(data["summary"]), evidence=tuple(map(str, data["evidence"])),origin_event_ids=(job.event.id,),normalized_source=job.event.source,publication_timestamp=job.event.timestamp,ingestion_timestamp=utc_now(),model_identifier=getattr(job,"model_identifier",None))
 
 
 class LlamaCppClient:
@@ -82,6 +83,7 @@ class AIWorker:
     def submit_nowait(self, job: AnalysisJob) -> bool:
         if not self.config.enabled:
             return False
+        if job.model_identifier is None:object.__setattr__(job,"model_identifier",self.config.model)
         try:
             self.sequence+=1; self.queue.put_nowait((int(job.priority),self.sequence,job))
             return True
