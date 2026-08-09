@@ -1,5 +1,28 @@
 # Historical macro research
 
+## Macro Event Feature Engine (v0.10.0)
+
+The feature engine builds one wide row per event from completed experiment artifacts and their referenced native candle datasets. It does not replay events or recompute strategy decisions:
+
+```bash
+python3 -m feline research features build \
+  data/reports/research/EXPERIMENT_2022 \
+  data/reports/research/EXPERIMENT_2023 \
+  data/reports/research/EXPERIMENT_2024
+python3 -m feline research features analyze \
+  data/reports/features/FEATURE_SET_ID/features.csv
+```
+
+The deterministic output directory contains `features.csv`, `feature_schema.json`, `provenance.json`, `feature_summary.json`, and `feature_report.md`. Its identity includes the input artifact checksums, Git commit, Feline version, feature-engine version, and feature-definition checksum.
+
+Predictors are divided into `PRE_EVENT`, `ANNOUNCEMENT`, and `STABILIZATION` phases. Every extracted predictor has an availability time, and `FeatureSnapshot` rejects it when `available_at > as_of`. Provider candle timestamps retain Feline's existing close-time visibility rule: a candle is not available until it has completed. `OUTCOME` fields are labels, explicitly marked `future_outcome`, and excluded from `predictor_columns()`.
+
+Pre-event realized volatility is the population standard deviation of completed one-minute close returns in the stated window. Pre-event range is `(maximum high - minimum low) / announcement reference close`. Candle body and wick values are fractions of candle high-low range, with zero-range candles safely represented as zero. Volatility decay is the population volatility of the last three completed returns before stabilization divided by population volatility from announcement through the first three completed post-event minutes; it is null when the denominator is unusable. All stabilization calculations stop at the actual stabilization timestamp.
+
+Clean +5m and +15m stabilization returns are outcome labels. Direction-normalized labels multiply the existing return by the sign of the existing initial shock, so positive means continuation and negative means reversal. Contaminated horizons remain identified but are null as clean labels. Events without stabilization remain in the dataset with available pre-event and announcement predictors, null stabilization predictors/outcomes, and `NO_STABILIZATION` classification.
+
+The analysis command reports missingness, outcome counts, descriptive Pearson/Spearman relationships, and outcome subgroup summaries. These are exploratory measurements on small samples, not statistical proof, feature selection, threshold optimization, a trading strategy, or evidence of profitability. Validation and test splits are preserved and never reshuffled.
+
 Feline v0.9.1 measures the existing deterministic macro classifier across many FOMC and ECB episodes. It does not tune thresholds, place live orders, or claim that classifications imply profitability.
 
 ## Manifest and catalog

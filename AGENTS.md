@@ -5,7 +5,7 @@
 1. `~/lynx` is read-only. Never create, modify, move, rename, reformat, or delete anything there.
 2. LLM inference never blocks market collection, deterministic risk, paper execution, or portfolio monitoring.
 3. The deterministic risk engine overrides every strategy, signal, and AI hypothesis. No bypass is permitted.
-4. Feline v0.9.2 has no live broker implementation or real-order path. Paper/research mode is the only mode and default.
+4. Feline v0.10.0 has no live broker implementation or real-order path. Paper/research mode is the only mode and default.
 21. GUI projections are bounded and lossy by design; the core event/audit path is authoritative and never waits for rendering.
 16. A simulated execution commit is atomic across fills, order state, cash, positions, pending quantity, and protective state.
 17. Duplicate fill identifiers are idempotent and impossible state transitions are rejected.
@@ -39,6 +39,7 @@
 - SQLite schema changes belong in ordered migrations, not scattered table creation.
 - Tests must work offline and must prove the core remains operational during AI failure and latency.
 - Strategies emit typed signals only. They never call a broker, mutate risk limits, or execute orders directly.
+- Feature predictors carry explicit phase and availability timestamps; outcome labels are structurally excluded from predictor snapshots.
 
 ## Development
 
