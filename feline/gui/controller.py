@@ -17,6 +17,7 @@ from feline.strategy.macro_event import MacroEventStrategy
 from feline.replay.session_report import build_replay_report,export_replay_report,file_checksum
 from feline.runtime import FelineRuntime
 from feline.market.candles import NativeCandleAggregator
+from feline.research.continuous import ContinuousFeatureEngine,ContinuousRegimeEngine,StrategyRouter
 
 class ReplayState(str,Enum):STOPPED="stopped";RUNNING="running";PAUSED="paused"
 TIMEFRAME_SECONDS={"1m":60.,"5m":300.,"15m":900.,"1h":3600.}
@@ -80,7 +81,7 @@ class ControlledReplayProvider(CSVReplayProvider):
 class WorkstationController:
  """Real runtime bridge. Qt polls bounded projections; core never waits for UI."""
  def __init__(self,config:AppConfig|None=None,limit=2000):
-  self.config=config or AppConfig();self.replay=ReplayController();self.worker=RuntimeThread();self.research_executor=ThreadPoolExecutor(max_workers=1,thread_name_prefix="feline-research");self.messages=Queue(maxsize=limit);self.runtime=None;self.future=None;self.research_future=None;self.research_cancel=threading.Event();self.selected_instrument=None;self.dropped=0;self.macro=None;self.phase=None;self.shock=ShockState.CALM;self.strategy={"state":"WAITING_FOR_EVENT","reason":""};self.horizons={};self.abstentions={"evaluated":0,"trades":0,"no_trade":0};self._macro_samples=[];self.session=None;self.records={};self.completed_snapshot=None
+  self.config=config or AppConfig();self.replay=ReplayController();self.worker=RuntimeThread();self.research_executor=ThreadPoolExecutor(max_workers=1,thread_name_prefix="feline-research");self.messages=Queue(maxsize=limit);self.runtime=None;self.future=None;self.research_future=None;self.research_cancel=threading.Event();self.selected_instrument=None;self.dropped=0;self.macro=None;self.phase=None;self.shock=ShockState.CALM;self.strategy={"state":"WAITING_FOR_EVENT","reason":""};self.continuous=None;self.continuous_events=[];self.continuous_features=ContinuousFeatureEngine();self.continuous_regimes=ContinuousRegimeEngine();self.continuous_router=StrategyRouter();self.horizons={};self.abstentions={"evaluated":0,"trades":0,"no_trade":0};self._macro_samples=[];self.session=None;self.records={};self.completed_snapshot=None
  def _emit(self,item):
   if self.session:item.setdefault("replay_session_id",self.session["replay_session_id"])
   item.setdefault("ingestion_timestamp",datetime.now(timezone.utc).isoformat())
@@ -109,7 +110,7 @@ class WorkstationController:
   while not self.messages.empty():
    try:self.messages.get_nowait()
    except Empty:break
-  self.macro=None;self.phase=None;self.shock=ShockState.CALM;self.strategy={"state":"WAITING_FOR_EVENT","reason":""};self.horizons={};self.abstentions={"evaluated":0,"trades":0,"no_trade":0};self._macro_samples=[];self.records={"signals":[],"risk":[],"macro":[],"ai":[],"diagnostics":[]};self.completed_snapshot=None
+  self.macro=None;self.phase=None;self.shock=ShockState.CALM;self.strategy={"state":"WAITING_FOR_EVENT","reason":""};self.continuous=None;self.continuous_events=[];self.continuous_features=ContinuousFeatureEngine();self.continuous_regimes=ContinuousRegimeEngine();self.continuous_router=StrategyRouter();self.horizons={};self.abstentions={"evaluated":0,"trades":0,"no_trade":0};self._macro_samples=[];self.records={"signals":[],"risk":[],"macro":[],"ai":[],"diagnostics":[]};self.completed_snapshot=None
   self.session={"replay_session_id":str(uuid4()),"dataset_path":str(Path(dataset).resolve()),"dataset_name":Path(dataset).name,"dataset_checksum":file_checksum(Path(dataset)),"replay_speed":speed,"seed":seed,"replay_start_timestamp":None,"replay_end_timestamp":None,"instruments":[],"strategy_configuration":{"mode":"macro_only" if kind=="jsonl" else "reference","reference_enabled":kind=="csv"},"risk_configuration":asdict(self.config.risk),"execution_assumptions":asdict(self.config.paper),"starting_equity":self.config.paper.initial_cash,"source_data_type":"tick","candle_timeframe":None,"providers":[],"ohlc_available":False,"volume_available":False,"spread_provenance":"provider bid/ask" if kind=="csv" else "fixture bid/ask","execution_bid_ask_synthetic":False}
   self.replay.configure(dataset,speed);self.replay.start();self.worker.start();provider=ControlledReplayProvider(dataset,speed,self.replay,seed) if kind=="csv" else None;runtime_config=self.config if kind=="csv" else replace(self.config,strategy=replace(self.config.strategy,enabled=False));self.runtime=FelineRuntime(runtime_config,provider=provider,recover=False,replay_session_id=self.session["replay_session_id"]);self.runtime.bus.subscribe(Event,self._event)
   self.runtime.database.save_replay_session(self.session,"running")
@@ -126,7 +127,7 @@ class WorkstationController:
   self.future=self.worker.submit(run());self._emit({"kind":"state","state":"running","dataset":dataset})
  async def _run_mixed(self,path,speed):
   from datetime import timedelta
-  events=read_mixed_events(path);previous_time=None;previous_price=None;detector=ShockDetector();strategy=MacroEventStrategy();native_aggregator=NativeCandleAggregator()
+  events=read_mixed_events(path);self.continuous_events=[event for event in events if isinstance(event,NormalizedEconomicEvent)];previous_time=None;previous_price=None;detector=ShockDetector();strategy=MacroEventStrategy();native_aggregator=NativeCandleAggregator()
   for index,event in enumerate(events):
    while self.replay.state is ReplayState.PAUSED and not self.replay._stop.is_set():await asyncio.sleep(.03)
    if self.replay._stop.is_set():break
@@ -160,6 +161,10 @@ class WorkstationController:
   row={"kind":"candle","instrument":event.instrument,"timeframe":event.timeframe,"timestamp":event.close_time.isoformat(),"open_timestamp":event.open_time.timestamp(),"close_timestamp":event.close_time.timestamp(),"open":event.open,"high":event.high,"low":event.low,"close":event.close,"volume":event.volume,"source":event.source,"provenance":event.provenance};existing=self.records.setdefault("candles",[])
   if existing and existing[-1].get("instrument")==event.instrument and existing[-1].get("timeframe")==event.timeframe and existing[-1].get("open_timestamp")==row["open_timestamp"]:return
   self._record("candles",row);self._emit(row)
+  if event.timeframe=="1m" and event.complete:
+   try:
+    snapshot=self.continuous_features.update(event,self.continuous_events);regime=self.continuous_regimes.classify(snapshot);decision=self.continuous_router.route(snapshot,regime);self.continuous={"regime":regime.regime.value,"strength":regime.regime_strength,"strategy":decision.strategy_family.value,"signal":decision.signal,"reason":decision.reason,"event_risk":regime.regime.value=="EVENT_RISK","timestamp":event.close_time.isoformat()};self._emit({"kind":"continuous",**self.continuous})
+   except ValueError as exc:self._emit({"kind":"diagnostic","severity":"warning","summary":f"continuous projection: {exc}"})
  def pause(self):self.replay.pause();self._emit({"kind":"state","state":"paused"})
  def resume(self):self.replay.resume();self._emit({"kind":"state","state":"running"})
  def stop(self):
@@ -170,7 +175,7 @@ class WorkstationController:
   Path("data/EMERGENCY_STOP").parent.mkdir(parents=True,exist_ok=True);Path("data/EMERGENCY_STOP").write_text("Qt emergency stop\n");self._emit({"kind":"state","state":"kill_switch"})
  def snapshot(self):
   if not self.runtime:return None
-  session_id=self.session["replay_session_id"] if self.session else None;p=self.runtime.broker.portfolio_state();return {"portfolio":p,"risk":{"trading_enabled":self.runtime.risk.trading_enabled,"kill_switch":self.runtime.risk.kill_switch,"danger":self.runtime.risk.danger.active(),"daily_pnl":self.runtime.risk.state.daily_pnl,"max_exposure":self.runtime.config.risk.max_total_exposure},"prices":{k:{"bid":v.bid,"ask":v.ask,"mid":v.mid,"spread":v.spread_ratio,"regime":self.runtime.regimes.current.get(k).value if k in self.runtime.regimes.current else "unknown"} for k,v in self.runtime.broker.quotes.items()},"ai":{"queue":self.runtime.ai.queue.qsize(),"available":self.runtime.ai.last_available,"model":self.runtime.config.ai.model},"positions":[vars(x) for x in self.runtime.broker.positions.values()],"orders":[{**x.payload(),"replay_session_id":session_id} for x in self.runtime.broker.orders.values()],"fills":[{**x.payload(),"replay_session_id":session_id} for x in self.runtime.broker.fills[-100:]],"trades":[{**vars(x),"replay_session_id":session_id} for x in self.runtime.trades.completed],"macro":vars(self.macro) if self.macro else None,"phase":self.phase,"shock":self.shock.value,"strategy":self.strategy,"horizons":self.horizons,"abstentions":self.abstentions,"replay_session_id":session_id,"dropped":self.dropped}
+  session_id=self.session["replay_session_id"] if self.session else None;p=self.runtime.broker.portfolio_state();return {"portfolio":p,"risk":{"trading_enabled":self.runtime.risk.trading_enabled,"kill_switch":self.runtime.risk.kill_switch,"danger":self.runtime.risk.danger.active(),"daily_pnl":self.runtime.risk.state.daily_pnl,"max_exposure":self.runtime.config.risk.max_total_exposure},"prices":{k:{"bid":v.bid,"ask":v.ask,"mid":v.mid,"spread":v.spread_ratio,"regime":self.runtime.regimes.current.get(k).value if k in self.runtime.regimes.current else "unknown"} for k,v in self.runtime.broker.quotes.items()},"ai":{"queue":self.runtime.ai.queue.qsize(),"available":self.runtime.ai.last_available,"model":self.runtime.config.ai.model},"positions":[vars(x) for x in self.runtime.broker.positions.values()],"orders":[{**x.payload(),"replay_session_id":session_id} for x in self.runtime.broker.orders.values()],"fills":[{**x.payload(),"replay_session_id":session_id} for x in self.runtime.broker.fills[-100:]],"trades":[{**vars(x),"replay_session_id":session_id} for x in self.runtime.trades.completed],"macro":vars(self.macro) if self.macro else None,"phase":self.phase,"shock":self.shock.value,"strategy":self.strategy,"continuous":self.continuous,"horizons":self.horizons,"abstentions":self.abstentions,"replay_session_id":session_id,"dropped":self.dropped}
  def build_report(self):
   if not self.session or not self.completed_snapshot:raise RuntimeError("no completed replay result")
   return build_replay_report(self.session,self.completed_snapshot,self.records)

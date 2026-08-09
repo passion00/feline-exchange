@@ -72,6 +72,7 @@ class AppConfig:
     strategy: StrategyConfig = field(default_factory=StrategyConfig)
     snapshot_interval_ticks: int = 20
     providers: dict = field(default_factory=dict)
+    continuous: dict = field(default_factory=dict)
 
 
 def load_config(path: Path | None = None) -> AppConfig:
@@ -90,4 +91,5 @@ def load_config(path: Path | None = None) -> AppConfig:
         strategy=StrategyConfig(**data.get("strategy", {})),
         snapshot_interval_ticks=max(1, int(data.get("snapshot_interval_ticks", 20))),
         providers=data.get("providers",{}),
+        continuous=data.get("continuous",{}),
     )

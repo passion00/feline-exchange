@@ -1,5 +1,7 @@
 # Historical macro research
 
+Continuous ordinary-market research is documented separately in [CONTINUOUS_RESEARCH.md](CONTINUOUS_RESEARCH.md). The v0.11 subsystem is additive; macro episode calculations and thresholds below are unchanged.
+
 ## Macro Event Feature Engine (v0.10.0)
 
 The feature engine builds one wide row per event from completed experiment artifacts and their referenced native candle datasets. It does not replay events or recompute strategy decisions:

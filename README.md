@@ -1,6 +1,6 @@
-# Feline Exchange v0.10.0 — Macro Event Feature Engine
+# Feline Exchange v0.11.0 — Continuous Market Research Engine
 
-Feline Exchange is a local-first observer, deterministic execution/replay simulator, and historical macro research platform. Version 0.10.0 remains paper/research only. Its additive feature engine converts completed historical experiments into phase-aware, auditable predictor and outcome datasets without changing strategy behavior, thresholds, or existing research formulas.
+Feline Exchange is a local-first observer, deterministic execution/replay simulator, and market research platform. Version 0.11.0 adds completed-candle continuous features, deterministic regimes, and three unoptimized reference strategy families while retaining the macro-event system unchanged. It remains paper/research only.
 
 v0.8 studies EUR/USD after Fed/ECB-style shocks, deliberately avoiding the initial announcement race. The Qt workstation opens CSV tick data and globally ordered mixed JSONL price/macro fixtures through one replay control. It models deterministic pre-event, announcement, shock, stabilization, post-event, and complete phases; research decisions classify continuation, mean reversion, or explicit NO_TRADE.
 
@@ -159,3 +159,14 @@ python3 -m feline research import-directory data/historical/raw data/historical/
 The workstation's **Run Research** action selects a manifest and runs outside the Qt thread. Its Research panel shows experiment ID, current event, completed/total, and exclusions; **Cancel Batch** preserves every committed episode.
 
 Each experiment directory contains `experiment.json`, `summary.md`, `events.csv`, `horizons.csv`, and `exclusions.csv`. Event data is processed one episode at a time. Native candles remain invisible until close, horizon outcomes are only computed after elapsed historical time, and TEST membership is explicit rather than randomly sampled. See [Historical research](docs/HISTORICAL_RESEARCH.md).
+
+## Continuous market research
+
+The additive v0.11 engine evaluates completed one-minute bars through compact rolling features, deterministic regimes, and explicit `NO_TRADE` routing. Critical event windows take precedence and suppress ordinary strategy families without changing macro logic.
+
+```bash
+python3 -m feline research continuous run data/historical/processed/eurusd_week.jsonl --instrument EURUSD --strategy all --no-trades
+python3 -m feline research continuous run data/historical/processed/eurusd_week.jsonl --instrument EURUSD --strategy all --seed 17
+```
+
+The first command produces feature/regime/setup observations only. The second sends eligible paper candidates through the existing deterministic risk engine and PaperBroker. Neither mode is live trading. See [Continuous research](docs/CONTINUOUS_RESEARCH.md) for formulas, precedence, configuration, and limitations.

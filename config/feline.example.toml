@@ -61,3 +61,20 @@ slow_period = 5
 atr_period = 3
 risk_fraction = 0.002
 max_signal_quantity = 10.0
+
+# Initial, unoptimized continuous-market research defaults.
+[continuous]
+minimum_history = 61
+maximum_gap_minutes = 2.0
+trend_min_slope_per_minute = 0.000025
+trend_min_price_vs_ma = 0.0008
+ranging_max_slope_per_minute = 0.00002
+ranging_max_range = 0.004
+expansion_volatility_ratio = 1.8
+compression_volatility_ratio = 0.55
+minimum_activity_volatility = 0.00005
+pullback_min = 0.0001
+pullback_max = 0.0015
+range_entry_zscore = 0.8
+event_minutes_before = 30.0
+event_minutes_after = 30.0
