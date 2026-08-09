@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "feline-exchange"
+version = "0.1.0"
+description = "Local market observer and deterministic paper trader"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.scripts]
+feline = "feline.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["feline*"]
+

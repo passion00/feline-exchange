@@ -1,0 +1,26 @@
+mode = "paper"
+database_path = "data/feline.db"
+log_directory = "logs"
+tick_interval_seconds = 0.25
+
+[paper]
+initial_cash = 100000.0
+slippage_bps = 1.0
+
+[risk]
+max_position_size = 100.0
+max_total_exposure = 100000.0
+max_loss_per_trade = 1000.0
+max_daily_loss = 2500.0
+max_drawdown = 0.10
+max_allowed_spread = 0.01
+emergency_volatility_threshold = 0.10
+trading_enabled = true
+
+[ai]
+enabled = true
+base_url = "http://127.0.0.1:8081"
+model = "llmware/qwen3-4b-instruct-gguf:Q4_K_M"
+request_timeout_seconds = 30.0
+queue_size = 32
+
