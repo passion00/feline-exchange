@@ -18,7 +18,7 @@ class ManifestEntry:
 
 @dataclass(frozen=True)
 class ResearchManifest:
- entries:tuple[ManifestEntry,...];seed:int=0;contamination_policy:str="flag";split:tuple[float,float,float]=(.6,.2,.2);missed_move_threshold:float=.003;bootstrap_samples:int=500
+ entries:tuple[ManifestEntry,...];seed:int=0;contamination_policy:str="flag";split:tuple[float,float,float]=(.6,.2,.2);missed_move_threshold:float=.003;bootstrap_samples:int=500;post_stabilization_flat_tolerance:float=.001;post_stabilization_classification_minutes:int=15
 
 def _time(value):return datetime.fromisoformat(value.replace("Z","+00:00")) if value else None
 def event_from_dict(row:dict,primary_default=True)->ResearchEvent:
@@ -35,4 +35,7 @@ def load_manifest(path:Path)->ResearchManifest:
  if len(split)!=3 or abs(sum(split)-1)>1e-9:raise ValueError("split must contain TRAIN/VALIDATION/TEST fractions summing to one")
  policy=data.get("contamination_policy","flag")
  if policy not in {"flag","censor"}:raise ValueError("contamination_policy must be flag or censor")
- return ResearchManifest(tuple(entries),int(data.get("seed",0)),policy,split,float(data.get("missed_move_threshold",.003)),int(data.get("bootstrap_samples",500)))
+ flat=float(data.get("post_stabilization_flat_tolerance",.001));classification=int(data.get("post_stabilization_classification_minutes",15))
+ if flat<0:raise ValueError("post_stabilization_flat_tolerance must be non-negative")
+ if classification not in {5,15,30,60}:raise ValueError("post_stabilization_classification_minutes must be 5, 15, 30 or 60")
+ return ResearchManifest(tuple(entries),int(data.get("seed",0)),policy,split,float(data.get("missed_move_threshold",.003)),int(data.get("bootstrap_samples",500)),flat,classification)

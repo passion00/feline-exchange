@@ -1,6 +1,6 @@
 # Historical macro research
 
-Feline v0.9 measures the existing deterministic macro classifier across many FOMC and ECB episodes. It does not tune thresholds, place live orders, or claim that classifications imply profitability.
+Feline v0.9.1 measures the existing deterministic macro classifier across many FOMC and ECB episodes. It does not tune thresholds, place live orders, or claim that classifications imply profitability.
 
 ## Manifest and catalog
 
@@ -21,6 +21,27 @@ Events are sorted by scheduled UTC time, then assigned chronological TRAIN, VALI
 ## Outputs and statistics
 
 `events.csv` is one row per included primary event. `horizons.csv` is normalized: one row per event/horizon. Aggregate JSON includes robust descriptive statistics, MAE/MFE, positive/negative fractions, clean/contaminated counts, deterministic bootstrap intervals, stabilization durations, subgroup summaries, and an initial-shock continuation/reversal baseline. NO_TRADE reasons and descriptive `missed_move_candidate` labels are diagnostics—not strategy changes or failures.
+
+## Post-shock measurement bases
+
+The original `announcement` horizon rows remain unchanged and use the pre-event reference. New `one_minute` rows use the first completed observation at or after announcement +1 minute, so `one_minute` 15m means `price_at_announcement_plus_15m / price_at_announcement_plus_1m - 1`. New `stabilization` rows start at the completed observation where deterministic stabilization was detected and target 5/15/30/60 elapsed minutes afterward. Missing targets remain absent; Feline never extrapolates.
+
+The stabilization impulse is `stabilization_price - pre_event_price`. At the longest available configured stabilization horizon:
+
+- impulse retention = `(later_price - pre_event_price) / stabilization_impulse`
+- retracement = `1 - impulse_retention`
+
+Thus retention 1/retracement 0 means no retracement, retention 0/retracement 1 means a full return to the pre-event reference, negative retention means reversal beyond it, and retention above 1 means extension. Values are intentionally not clamped.
+
+Post-stabilization MAE/MFE use native intrabar low/high where available. Values are signed in the initial-shock direction: MFE is the largest favorable directional return from stabilization; MAE is the smallest directional return and is normally negative. Extension/reversal use the same direction but normalize price displacement by the pre-event reference. Times to high/low/extreme are measured from announcement, and do not imply that an intrabar extreme was a completed close.
+
+`post_stabilization_outcome` is descriptive, separate from `strategy_outcome`, and evaluated at the configured 15-minute post-stabilization horizon by default. Absolute return at or below `post_stabilization_flat_tolerance` (default 0.001) is FLAT; otherwise sign agreement with the stabilization impulse is CONTINUATION and disagreement is MEAN_REVERSION. An event without detected stabilization is NO_STABILIZATION and receives no fabricated stabilization metrics.
+
+Contamination is calculated independently for each actual interval. A +30-minute press conference can leave stabilization→15m clean while contaminating stabilization→30m. `flag` retains it; `censor` excludes it only from aggregate calculation.
+
+NO_TRADE exports include every unchanged strategy gate's observed value, threshold, comparison and pass/fail state. These diagnostics explain decisions but do not participate in them.
+
+Schema 1.1 keeps legacy event payloads readable and adds `research_post_shock_metrics`, keyed by experiment and event. `events.csv` exposes common post-shock fields directly. `horizons.csv` adds a `reference_basis` discriminator (`announcement`, `one_minute`, or `stabilization`) plus explicit reference/target timestamps; existing announcement returns retain their v0.9 meaning.
 
 Small samples, synthetic spreads, price/mid OHLC, provider timestamp conventions, confounding releases, and selection bias materially limit inference. Bootstrap intervals quantify resampling uncertainty only; they do not establish causal or future predictive validity.
 

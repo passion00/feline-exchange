@@ -43,4 +43,7 @@ MIGRATIONS: tuple[str, ...] = (
     CREATE TABLE IF NOT EXISTS research_exclusions (experiment_id TEXT NOT NULL,event_id TEXT NOT NULL,reason TEXT NOT NULL,payload TEXT NOT NULL,PRIMARY KEY(experiment_id,event_id));
     CREATE INDEX IF NOT EXISTS idx_research_episode_experiment ON research_episodes(experiment_id);
     """,
+    """
+    CREATE TABLE IF NOT EXISTS research_post_shock_metrics (experiment_id TEXT NOT NULL,event_id TEXT NOT NULL,payload TEXT NOT NULL,PRIMARY KEY(experiment_id,event_id));
+    """,
 )

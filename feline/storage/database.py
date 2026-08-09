@@ -66,7 +66,7 @@ class Database:
             self.connection.commit()
 
     def count(self, table: str) -> int:
-        allowed = {"market_events", "news_events", "ai_analyses", "signals", "paper_orders", "paper_trades", "positions", "portfolio_snapshots", "risk_events", "system_events", "candles", "regime_events","fills","financing_charges","pending_orders","experiments","walk_forward_windows","replay_sessions","dataset_registry","research_experiments","research_episodes","event_results","aggregate_results","research_exclusions"}
+        allowed = {"market_events", "news_events", "ai_analyses", "signals", "paper_orders", "paper_trades", "positions", "portfolio_snapshots", "risk_events", "system_events", "candles", "regime_events","fills","financing_charges","pending_orders","experiments","walk_forward_windows","replay_sessions","dataset_registry","research_experiments","research_episodes","event_results","aggregate_results","research_exclusions","research_post_shock_metrics"}
         if table not in allowed:
             raise ValueError("Invalid table")
         return int(self.connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0])
@@ -161,6 +161,11 @@ class Database:
 
     def save_aggregate_result(self,experiment_id,result)->None:
         with self.lock:self.connection.execute("INSERT OR REPLACE INTO aggregate_results VALUES(?,?)",(experiment_id,json.dumps(result,default=str)));self.connection.commit()
+
+    def save_post_shock_metrics(self,experiment_id,event_id,result)->None:
+        fields=("one_minute_reference","incremental_horizons","initial_shock_reference_price","initial_shock_displacement","initial_shock_direction","stabilization_reference","post_stabilization_horizons","post_stabilization_outcome","retracement_fraction","impulse_retention_fraction","maximum_post_stabilization_extension","maximum_post_stabilization_reversal","time_to_post_event_extreme_seconds","time_to_post_event_high_seconds","time_to_post_event_low_seconds","decision_diagnostics")
+        payload={key:result.get(key) for key in fields}
+        with self.lock:self.connection.execute("INSERT OR REPLACE INTO research_post_shock_metrics VALUES(?,?,?)",(experiment_id,event_id,json.dumps(payload,default=str)));self.connection.commit()
 
     def health(self) -> list[dict]:
         return [dict(row) for row in self.connection.execute("SELECT * FROM health_state ORDER BY component")]

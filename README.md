@@ -1,6 +1,6 @@
-# Feline Exchange v0.9 — Historical Macro Research Engine
+# Feline Exchange v0.9.1 — Post-Shock Research Metrics
 
-Feline Exchange is a local-first observer, deterministic execution/replay simulator, and historical macro research platform. Version 0.9 remains paper/research only. It batch-processes FOMC/ECB episodes without adding strategies or tuning the existing macro thresholds.
+Feline Exchange is a local-first observer, deterministic execution/replay simulator, and historical macro research platform. Version 0.9.1 remains paper/research only. It separates announcement, post-one-minute-shock, and post-stabilization measurements without adding strategies or tuning existing thresholds.
 
 v0.8 studies EUR/USD after Fed/ECB-style shocks, deliberately avoiding the initial announcement race. The Qt workstation opens CSV tick data and globally ordered mixed JSONL price/macro fixtures through one replay control. It models deterministic pre-event, announcement, shock, stabilization, post-event, and complete phases; research decisions classify continuation, mean reversion, or explicit NO_TRADE.
 

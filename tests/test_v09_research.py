@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 from datetime import datetime, timezone
+import csv
 import json
 from pathlib import Path
 import threading
@@ -84,14 +85,21 @@ class HistoricalResearchTests(unittest.TestCase):
     second = run_experiment(MANIFEST, cfg, tmp_path / "reports-b")
     assert first["aggregate"]["counts"] == {"total": 6, "included": 5, "excluded": 1, "FOMC": 3, "ECB": 2}
     assert first["aggregate"]["strategy_outcomes"] == {"CONTINUATION": 2, "MEAN_REVERSION": 2, "NO_TRADE": 1}
-    comparable = lambda result: [(x["event_id"], x.get("strategy_outcome"), {k: v.get("return_value") for k, v in x.get("horizons", {}).items()}) for x in result["results"]]
+    comparable = lambda result: [(x["event_id"], x.get("strategy_outcome"), {k: v.get("return_value") for k, v in x.get("horizons", {}).items()},{k:v.get("return_value") for k,v in x.get("incremental_horizons",{}).items()},{k:v.get("return_value") for k,v in x.get("post_stabilization_horizons",{}).items()}) for x in result["results"]]
     assert comparable(first) == comparable(second)
     out = Path(first["output_directory"])
     assert {"experiment.json", "summary.md", "events.csv", "horizons.csv", "exclusions.csv"} <= {x.name for x in out.iterdir()}
     assert "Classification statistics do not establish profitability" in (out / "summary.md").read_text()
+    with (out / "events.csv").open() as handle:
+        event_row=next(csv.DictReader(handle))
+    assert "post_stabilization_outcome" in event_row and "decision_diagnostics" in event_row
+    with (out / "horizons.csv").open() as handle:
+        bases={row["reference_basis"] for row in csv.DictReader(handle)}
+    assert {"announcement","one_minute"} <= bases
     db = Database(cfg.database_path)
     assert db.count("research_experiments") == 2
     assert db.count("research_episodes") == 12
+    assert db.count("research_post_shock_metrics") == 10
     assert db.integrity_report()["sqlite"] == "ok"
     db.close()
 
