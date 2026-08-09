@@ -4,10 +4,10 @@ def run_gui():
  try:
   from PySide6.QtCore import QSettings,Qt,QTimer,QRectF,QLineF
   from PySide6.QtGui import QAction,QKeySequence,QPainter,QPicture
-  from PySide6.QtWidgets import QApplication,QComboBox,QFileDialog,QHBoxLayout,QLabel,QMainWindow,QMessageBox,QPushButton,QSplitter,QTableWidget,QTableWidgetItem,QTabWidget,QTextEdit,QToolTip,QVBoxLayout,QWidget
+  from PySide6.QtWidgets import QApplication,QCheckBox,QComboBox,QFileDialog,QHBoxLayout,QLabel,QMainWindow,QMessageBox,QPushButton,QSplitter,QTableWidget,QTableWidgetItem,QTabWidget,QTextEdit,QToolTip,QVBoxLayout,QWidget
   import pyqtgraph as pg
  except ImportError as exc:raise SystemExit("Qt GUI dependencies missing. Install with: python3 -m pip install -e .") from exc
- from .controller import ChartBuffer,EventProjection,WorkstationController
+ from .controller import ChartBuffer,EventProjection,WorkstationController,shifted_x_range,should_follow_candle,visible_candle_y_range
  app=QApplication([]);app.setStyle("Fusion");app.setStyleSheet("QWidget{background:#11161d;color:#d8dee9;font-size:12px} QTableWidget,QTextEdit{background:#0b1016;border:1px solid #263241} QPushButton{padding:5px 10px;background:#202b38;border:1px solid #34465a} QPushButton:hover{background:#29394a} QTabBar::tab:selected{background:#26384b}")
  class CandlestickItem(pg.GraphicsObject):
   def __init__(self):super().__init__();self.picture=QPicture();self.data=[]
@@ -25,10 +25,10 @@ def run_gui():
    spacing=min((self.data[i]["open_timestamp"]-self.data[i-1]["open_timestamp"] for i in range(1,len(self.data)) if self.data[i]["open_timestamp"]>self.data[i-1]["open_timestamp"]),default=60);return QRectF(self.data[0]["open_timestamp"],min(x["low"] for x in self.data),self.data[-1]["open_timestamp"]-self.data[0]["open_timestamp"]+spacing,max(x["high"] for x in self.data)-min(x["low"] for x in self.data))
  class Window(QMainWindow):
   def __init__(self):
-   super().__init__();self.setWindowTitle("Feline Exchange v0.9.1 — Post-Shock Research Workstation");self.settings=QSettings("FelineExchange","Workstation");self.resize(self.settings.value("size",self.size()));self.chart_data={};self.events=EventProjection();self.controller=WorkstationController();self.dataset=None;self.instrument=None;self.chart_marker_items=[]
+   super().__init__();self.setWindowTitle("Feline Exchange v0.9.1 — Post-Shock Research Workstation");self.settings=QSettings("FelineExchange","Workstation");self.resize(self.settings.value("size",self.size()));self.chart_data={};self.events=EventProjection();self.controller=WorkstationController();self.dataset=None;self.instrument=None;self.chart_marker_items=[];self.displayed_latest={};self.pending_follow_steps=0;self.chart_initialized=False
    root=QWidget();layout=QVBoxLayout(root);top=QHBoxLayout();top.addWidget(QLabel("<b>FELINE EXCHANGE</b>"));mode=QLabel("  PAPER / RESEARCH MODE  ");mode.setStyleSheet("background:#735c0f;color:#fff3bf;padding:5px;font-weight:bold");top.addWidget(mode);top.addStretch();self.status=QLabel("RUNTIME ● STOPPED   FEED ● OFF   DB ● OK   AI ● UNKNOWN   DANGER ● OFF   KILL ● OFF");top.addWidget(self.status);layout.addLayout(top)
    split=QSplitter(Qt.Horizontal);left=QTabWidget();self.watch=QTableWidget(0,5);self.watch.setHorizontalHeaderLabels(["Symbol","Last","Change","Spread","Regime"]);left.addTab(self.watch,"Watchlist");self.macro_watch=QTableWidget(0,4);self.macro_watch.setHorizontalHeaderLabels(["Event","Source","Time","Phase"]);left.addTab(self.macro_watch,"Macro Watch");left.addTab(QTableWidget(0,2),"Providers");split.addWidget(left)
-   center=QWidget();cl=QVBoxLayout(center);controls=QHBoxLayout();self.open=QPushButton("Open Dataset");self.speed=QComboBox();self.speed.addItems(["0.25","0.5","1","2","5","10","MAX"]);self.chart_mode=QComboBox();self.chart_mode.addItems(["Candles","Line"]);self.timeframe=QComboBox();self.timeframe.addItems(["1m","5m","15m","1h"]);self.play=QPushButton("Start");self.pause=QPushButton("Pause");self.stop=QPushButton("Stop");self.fit=QPushButton("Fit");self.export=QPushButton("Export Replay Report");self.export.setEnabled(False);[controls.addWidget(x) for x in (self.open,self.speed,self.chart_mode,self.timeframe,self.play,self.pause,self.stop,self.fit,self.export)];cl.addLayout(controls);self.plot=pg.PlotWidget(axisItems={"bottom":pg.DateAxisItem()});self.plot.showGrid(x=True,y=True,alpha=.2);self.curve=self.plot.plot(pen=pg.mkPen("#55b7ff",width=2));self.candle_item=CandlestickItem();self.plot.addItem(self.candle_item);cl.addWidget(self.plot);split.addWidget(center)
+   center=QWidget();cl=QVBoxLayout(center);controls=QHBoxLayout();self.open=QPushButton("Open Dataset");self.speed=QComboBox();self.speed.addItems(["0.25","0.5","1","2","5","10","MAX"]);self.chart_mode=QComboBox();self.chart_mode.addItems(["Candles","Line"]);self.timeframe=QComboBox();self.timeframe.addItems(["1m","5m","15m","1h"]);self.auto_follow=QCheckBox("Auto-fit && Follow");self.auto_follow.setChecked(True);self.play=QPushButton("Start");self.pause=QPushButton("Pause");self.stop=QPushButton("Stop");self.fit=QPushButton("Fit");self.export=QPushButton("Export Replay Report");self.export.setEnabled(False);[controls.addWidget(x) for x in (self.open,self.speed,self.chart_mode,self.timeframe,self.auto_follow,self.play,self.pause,self.stop,self.fit,self.export)];cl.addLayout(controls);self.plot=pg.PlotWidget(axisItems={"bottom":pg.DateAxisItem()});self.plot.showGrid(x=True,y=True,alpha=.2);self.curve=self.plot.plot(pen=pg.mkPen("#55b7ff",width=2));self.candle_item=CandlestickItem();self.plot.addItem(self.candle_item);cl.addWidget(self.plot);split.addWidget(center)
    right=QTabWidget();self.right={};
    for name in ("Portfolio","Risk","Regime","AI Opinion","Strategy State","Horizons","Research"):self.right[name]=QTextEdit();self.right[name].setReadOnly(True);right.addTab(self.right[name],name)
    split.addWidget(right);split.setSizes([260,700,300]);layout.addWidget(split,4)
@@ -36,14 +36,14 @@ def run_gui():
    columns={"Event Stream":["Time","Category","Instrument","Summary"],"Signals":["Time","Instrument","Strategy","Outcome","Direction","Confidence","Risk","Reason"],"Orders / Fills":["Time","ID","Instrument","Side","Type","State","Quantity","Filled","Remaining","Fill","Spread","Slippage","Commission","Latency"],"Completed Trades":["Instrument","Direction","Entry","Exit","Quantity","Net P/L","Costs","Holding","MAE","MFE","Exit reason","Strategy"],"Diagnostics":["Time","Severity","Component","Summary"]}
    for name,headers in columns.items():self.bottom[name]=QTableWidget(0,len(headers));self.bottom[name].setHorizontalHeaderLabels(headers);bottom.addTab(self.bottom[name],name)
    layout.addWidget(bottom,2);self.setCentralWidget(root)
-   self.research_open=QPushButton("Run Research");self.research_cancel=QPushButton("Cancel Batch");controls.addWidget(self.research_open);controls.addWidget(self.research_cancel);emergency=QPushButton("EMERGENCY STOP");emergency.setStyleSheet("background:#7f1d1d;font-weight:bold");top.addWidget(emergency);emergency.clicked.connect(self.emergency);self.open.clicked.connect(self.choose);self.play.clicked.connect(self.start_replay);self.pause.clicked.connect(self.toggle_pause);self.stop.clicked.connect(self.controller.stop);self.fit.clicked.connect(self.fit_chart);self.export.clicked.connect(self.export_report);self.research_open.clicked.connect(self.start_research);self.research_cancel.clicked.connect(self.controller.cancel_research);self.watch.cellClicked.connect(self.select_instrument);self.timer=QTimer(self);self.timer.timeout.connect(self.refresh);self.timer.start(100)
+   self.research_open=QPushButton("Run Research");self.research_cancel=QPushButton("Cancel Batch");controls.addWidget(self.research_open);controls.addWidget(self.research_cancel);emergency=QPushButton("EMERGENCY STOP");emergency.setStyleSheet("background:#7f1d1d;font-weight:bold");top.addWidget(emergency);emergency.clicked.connect(self.emergency);self.open.clicked.connect(self.choose);self.play.clicked.connect(self.start_replay);self.pause.clicked.connect(self.toggle_pause);self.stop.clicked.connect(self.controller.stop);self.fit.clicked.connect(self.fit_chart);self.export.clicked.connect(self.export_report);self.research_open.clicked.connect(self.start_research);self.research_cancel.clicked.connect(self.controller.cancel_research);self.watch.cellClicked.connect(self.select_instrument);self.timeframe.currentTextChanged.connect(self.timeframe_changed);self.timer=QTimer(self);self.timer.timeout.connect(self.refresh);self.timer.start(100)
    act=QAction(self);act.setShortcut(QKeySequence("Ctrl+O"));act.triggered.connect(self.choose);self.addAction(act);space=QAction(self);space.setShortcut(QKeySequence(Qt.Key_Space));space.triggered.connect(self.toggle_pause);self.addAction(space)
   def choose(self):
    path,_=QFileDialog.getOpenFileName(self,"Open replay dataset","","Replay (*.csv *.jsonl)");
    if path:self.dataset=path
   def start_replay(self):
    if self.dataset:
-    self.chart_data.clear();self.chart_marker_items.clear();self.events=EventProjection();self.plot.clear();self.curve=self.plot.plot(pen=pg.mkPen("#55b7ff",width=2));self.candle_item=CandlestickItem();self.plot.addItem(self.candle_item);self.macro_watch.setRowCount(0);self.export.setEnabled(False)
+    self.chart_data.clear();self.chart_marker_items.clear();self.displayed_latest.clear();self.pending_follow_steps=0;self.chart_initialized=False;self.events=EventProjection();self.plot.clear();self.curve=self.plot.plot(pen=pg.mkPen("#55b7ff",width=2));self.candle_item=CandlestickItem();self.plot.addItem(self.candle_item);self.macro_watch.setRowCount(0);self.export.setEnabled(False)
     for table in self.bottom.values():table.setRowCount(0)
     self.controller.start_replay(self.dataset,self.speed.currentText())
   def start_research(self):
@@ -59,9 +59,20 @@ def run_gui():
    except Exception as exc:self._append(self.bottom["Diagnostics"],["","error","report",str(exc)]);QMessageBox.warning(self,"Report export failed",str(exc))
   def fit_chart(self):
    if self.instrument in self.chart_data:self.chart_data[self.instrument].request_fit();self.plot.enableAutoRange()
+  def timeframe_changed(self,value):
+   self.pending_follow_steps=0;self.chart_initialized=False
+   if self.instrument in self.chart_data:
+    self.chart_data[self.instrument].request_fit();series=self.chart_data[self.instrument].candles[value]
+    if series:self.displayed_latest[(self.instrument,value)]=series[-1]["open_timestamp"]
+  def fit_visible_candles_y_range(self,candles):
+   target=visible_candle_y_range(candles,self.plot.getViewBox().viewRange()[0])
+   if target:self.plot.setYRange(*target,padding=0)
+  def follow_new_candle(self,candles,steps=1):
+   if not self.auto_follow.isChecked() or not self.chart_initialized or steps<=0:return
+   current=self.plot.getViewBox().viewRange()[0];shifted=shifted_x_range(current,self.timeframe.currentText());interval=shifted[0]-current[0];shifted=(current[0]+interval*steps,current[1]+interval*steps);self.plot.setXRange(*shifted,padding=0);self.fit_visible_candles_y_range(candles)
   def select_instrument(self,row,column):
    item=self.watch.item(row,0)
-   if item:self.instrument=item.text();self.controller.selected_instrument=self.instrument;self.chart_data.setdefault(self.instrument,ChartBuffer()).request_fit();self._render_markers()
+   if item:self.instrument=item.text();self.controller.selected_instrument=self.instrument;self.pending_follow_steps=0;self.chart_initialized=False;self.chart_data.setdefault(self.instrument,ChartBuffer()).request_fit();self._render_markers()
   def toggle_pause(self):self.controller.resume() if self.controller.replay.state.value=="paused" else self.controller.pause();self.pause.setText("Resume" if self.controller.replay.state.value=="paused" else "Pause")
   def emergency(self):
    if QMessageBox.question(self,"Confirm emergency stop","Activate deterministic PAPER kill switch?",QMessageBox.Yes|QMessageBox.No)==QMessageBox.Yes:
@@ -70,7 +81,9 @@ def run_gui():
    for item in self.controller.drain():
     if item["kind"]=="tick":
      self.instrument=self.instrument or item["instrument"];buf=self.chart_data.setdefault(item["instrument"],ChartBuffer());buf.add(item["timestamp"],item["price"])
-    elif item["kind"]=="candle":self.instrument=self.instrument or item["instrument"];self.chart_data.setdefault(item["instrument"],ChartBuffer()).add_candle(item)
+    elif item["kind"]=="candle":
+     self.instrument=self.instrument or item["instrument"];is_new=self.chart_data.setdefault(item["instrument"],ChartBuffer()).add_candle(item);key=(item["instrument"],item["timeframe"]);previous=self.displayed_latest.get(key);self.displayed_latest[key]=item["open_timestamp"]
+     if should_follow_candle(self.auto_follow.isChecked(),is_new,previous,item["instrument"],item["timeframe"],self.instrument,self.timeframe.currentText()):self.pending_follow_steps+=1
     elif item["kind"]=="event":self.events.add(item["timestamp"],item["category"],item["summary"],item["instrument"],item.get("payload"))
     elif item["kind"]=="signal":self._append(self.bottom["Signals"],[item.get(k,"") for k in ("timestamp","instrument","strategy","outcome","direction","confidence","risk","reason")])
     elif item["kind"]=="marker":
@@ -82,7 +95,8 @@ def run_gui():
     elif item["kind"]=="state" and item.get("state")=="completed":self.export.setEnabled(True)
    if self.instrument and self.instrument in self.chart_data:
     buf=self.chart_data[self.instrument];points=list(buf.points);candles=list(buf.candles[self.timeframe.currentText()]);line_mode=self.chart_mode.currentText()=="Line";self.curve.setVisible(line_mode or not candles);self.candle_item.setVisible(not line_mode and bool(candles));self.curve.setData([x for x,_ in points],[y for _,y in points]);self.candle_item.setData(candles);
-    if points and buf.consume_fit():self.plot.autoRange()
+    if points and buf.consume_fit():self.plot.autoRange();self.chart_initialized=True;self.pending_follow_steps=0
+    elif candles and self.pending_follow_steps:self.follow_new_candle(candles,self.pending_follow_steps);self.pending_follow_steps=0
    snap=self.controller.snapshot()
    if not snap:return
    p=snap["portfolio"];r=snap["risk"];a=snap["ai"];sid=(snap.get("replay_session_id") or "--------")[:8];self.status.setText(f"SESSION {sid}   RUNTIME ● {self.controller.replay.state.value.upper()}   FEED ● SYNTHETIC   DB ● OK   AI ● {'OK' if a['available'] else 'UNAVAILABLE'}   DANGER ● {'ON' if r['danger'] else 'OFF'}   KILL ● {'ON' if r['kill_switch'] else 'OFF'}")

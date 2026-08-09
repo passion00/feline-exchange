@@ -19,14 +19,29 @@ from feline.runtime import FelineRuntime
 from feline.market.candles import NativeCandleAggregator
 
 class ReplayState(str,Enum):STOPPED="stopped";RUNNING="running";PAUSED="paused"
+TIMEFRAME_SECONDS={"1m":60.,"5m":300.,"15m":900.,"1h":3600.}
+
+def shifted_x_range(x_range,timeframe):
+ interval=TIMEFRAME_SECONDS[timeframe];return (float(x_range[0])+interval,float(x_range[1])+interval)
+
+def visible_candle_y_range(candles,x_range,padding_fraction=.04):
+ left,right=map(float,x_range);visible=[c for c in candles if float(c["open_timestamp"])<=right and float(c["close_timestamp"])>=left]
+ if not visible:return None
+ low=min(float(c["low"]) for c in visible);high=max(float(c["high"]) for c in visible);span=high-low;scale=max(abs(low),abs(high),1.);padding=max(span*padding_fraction,scale*1e-6,1e-9);return (low-padding,high+padding)
+
+def should_follow_candle(enabled,is_new,previous_timestamp,instrument,timeframe,selected_instrument,selected_timeframe):
+ return bool(enabled and is_new and previous_timestamp is not None and instrument==selected_instrument and timeframe==selected_timeframe)
+
 class ChartBuffer:
  def __init__(self,limit=5000):self.points=deque(maxlen=limit);self.candles={x:deque(maxlen=limit) for x in ("1m","5m","15m","1h")};self.markers=deque(maxlen=500);self.needs_fit=True
  def add(self,timestamp,price):self.points.append((timestamp,price))
  def add_candle(self,value):
   series=self.candles[value["timeframe"]]
-  if series and series[-1]["open_timestamp"]==value["open_timestamp"]:series[-1]=value
+  is_new=not series or series[-1]["open_timestamp"]!=value["open_timestamp"]
+  if not is_new:series[-1]=value
   else:series.append(value)
   if not self.points or self.points[-1][0]!=value["close_timestamp"]:self.points.append((value["close_timestamp"],value["close"]))
+  return is_new
  def consume_fit(self):value=self.needs_fit;self.needs_fit=False;return value
  def request_fit(self):self.needs_fit=True
 class EventProjection:
