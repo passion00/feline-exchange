@@ -65,7 +65,8 @@ class FelineRuntime:
         self.database.persist_event(event)
         if isinstance(event,AIAnalysisResult):self.database.save_health("ai","available" if event.available else "unavailable",{"queue_depth":self.ai.queue.qsize(),"error":event.error})
 
-    async def handle_tick(self, tick: PriceTick) -> None:
+    async def handle_tick(self, tick: PriceTick, build_candles: bool = True) -> None:
+        build_candles = build_candles and not tick.source.endswith(":synthetic_execution")
         if self.replay_session_id and tick.replay_session_id != self.replay_session_id:
             tick = __import__('dataclasses').replace(tick,replay_session_id=self.replay_session_id)
         self.last_market_timestamp=tick.timestamp
@@ -88,7 +89,7 @@ class FelineRuntime:
             await self.bus.publish(transition)
         regime=self.regimes.current.get(tick.instrument,Regime.INSUFFICIENT_DATA)
         self.broker.extreme_volatility=regime is Regime.EXTREME_VOLATILITY
-        for candle in self.candles.update(tick):
+        for candle in self.candles.update(tick) if build_candles else ():
             await self.bus.publish(candle)
             signal=self.strategy.on_candle(candle,regime)
             if signal and self.config.strategy.enabled:

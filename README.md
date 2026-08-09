@@ -1,6 +1,6 @@
-# Feline Exchange v0.8.1 — Replay Isolation, Timestamp Integrity and Report Export
+# Feline Exchange v0.8.2 — Native OHLC Replay and Candlestick Workstation
 
-Feline Exchange is a local-first observer, deterministic execution/replay simulator, and research platform. Version 0.8.1 remains paper/research only.
+Feline Exchange is a local-first observer, deterministic execution/replay simulator, and research platform. Version 0.8.2 remains paper/research only.
 
 v0.8 studies EUR/USD after Fed/ECB-style shocks, deliberately avoiding the initial announcement race. The Qt workstation opens CSV tick data and globally ordered mixed JSONL price/macro fixtures through one replay control. It models deterministic pre-event, announcement, shock, stabilization, post-event, and complete phases; research decisions classify continuation, mean reversion, or explicit NO_TRADE.
 
@@ -129,3 +129,17 @@ python3 -m feline replay tests/fixtures/fomc_2024_synthetic.jsonl --speed max --
 ```
 
 Projected rows distinguish historical `source_timestamp` from wall-clock `ingestion_timestamp`. The latter is audit metadata and is never displayed as the historical event time.
+
+## Native OHLC and Twelve Data local import
+
+`CandleUpdate` validates OHLC ordering and identifies `native` versus tick-`reconstructed` provenance. A provider candle's datetime is modeled as `open_time`; its complete OHLC becomes available only at `close_time`, which is also its replay timestamp. Native 1-minute bars aggregate deterministically into completed 5m, 15m, and 1h bars. Incomplete higher-timeframe buckets are not flushed, preventing future-data leakage.
+
+```bash
+python3 -m feline import-twelvedata data/historical/fed/eurusd_2024-09-18.json data/historical/fed/eurusd_2024-09-18-ohlc.jsonl --instrument EURUSD --interval 1min --timezone UTC
+python3 -m feline add-macro-event data/historical/fed/eurusd_2024-09-18-ohlc.jsonl data/historical/fed/eurusd_2024-09-18-fomc.jsonl --timestamp 2024-09-18T18:00:00Z --event-id fomc-2024-09-18 --title "FOMC September 2024 decision" --instrument EURUSD
+python3 -m feline gui
+```
+
+The chart defaults to **Candles**, offers Line mode and 1m/5m/15m/1h selectors, and retains zoom, pan, Fit, instrument selection, date/time axes, and markers. Clicking a candle shows its completed O/H/L/C and volume.
+
+Horizon return, volatility, shock, and stabilization retain close-to-close semantics. Native OHLC lets horizon MAE use intrabar lows and MFE use intrabar highs; no strategy threshold was retuned. Provider OHLC is price/mid data—not historical bid/ask. Paper execution derives bid/ask from the configured synthetic spread, and reports label that assumption. Downloaded provider files remain local/ignored and subject to provider licensing terms.

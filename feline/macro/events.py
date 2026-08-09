@@ -47,6 +47,6 @@ class ShockDetector:
 class HorizonMeasurement:
  horizon_minutes:int;return_value:float;mae:float;mfe:float;volatility:float;average_spread:float;classification:MacroOutcome
 
-def measure_horizon(prices:list[float],spreads:list[float],minutes:int)->HorizonMeasurement:
- start=prices[0];ret=prices[-1]/start-1;moves=[p/start-1 for p in prices];mean=sum(moves)/len(moves);vol=math.sqrt(sum((x-mean)**2 for x in moves)/max(1,len(moves)-1));classification=MacroOutcome.CONTINUATION if abs(ret)>.001 and ret*moves[1 if len(moves)>1 else 0]>=0 else MacroOutcome.MEAN_REVERSION if abs(ret)>.001 else MacroOutcome.NO_TRADE
- return HorizonMeasurement(minutes,ret,min(moves),max(moves),vol,sum(spreads)/len(spreads),classification)
+def measure_horizon(prices:list[float],spreads:list[float],minutes:int,highs:list[float]|None=None,lows:list[float]|None=None)->HorizonMeasurement:
+ start=prices[0];ret=prices[-1]/start-1;moves=[p/start-1 for p in prices];mean=sum(moves)/len(moves);vol=math.sqrt(sum((x-mean)**2 for x in moves)/max(1,len(moves)-1));high_moves=[p/start-1 for p in (highs or prices)];low_moves=[p/start-1 for p in (lows or prices)];classification=MacroOutcome.CONTINUATION if abs(ret)>.001 and ret*moves[1 if len(moves)>1 else 0]>=0 else MacroOutcome.MEAN_REVERSION if abs(ret)>.001 else MacroOutcome.NO_TRADE
+ return HorizonMeasurement(minutes,ret,min(low_moves),max(high_moves),vol,sum(spreads)/len(spreads),classification)

@@ -5,7 +5,7 @@
 1. `~/lynx` is read-only. Never create, modify, move, rename, reformat, or delete anything there.
 2. LLM inference never blocks market collection, deterministic risk, paper execution, or portfolio monitoring.
 3. The deterministic risk engine overrides every strategy, signal, and AI hypothesis. No bypass is permitted.
-4. Feline v0.8.1 has no live broker implementation or real-order path. Paper/research mode is the only mode and default.
+4. Feline v0.8.2 has no live broker implementation or real-order path. Paper/research mode is the only mode and default.
 21. GUI projections are bounded and lossy by design; the core event/audit path is authoritative and never waits for rendering.
 16. A simulated execution commit is atomic across fills, order state, cash, positions, pending quantity, and protective state.
 17. Duplicate fill identifiers are idempotent and impossible state transitions are rejected.
@@ -25,6 +25,8 @@
 15. Metrics services are loopback-only and read-only, with no trading or risk-control routes.
 
 ## Architecture
+
+- Native historical OHLC is exposed only at candle close time; provider OHLC must never be treated as historical bid/ask.
 
 - Level 1 (`feline/risk`, `feline/execution`, `feline/portfolio`): deterministic reflex path, no LLM calls.
 - Level 2 (`feline/quant`): modular numerical indicators and signals, no LLM dependency.

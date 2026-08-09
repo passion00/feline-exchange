@@ -92,6 +92,13 @@ class CandleUpdate(Event):
     tick_count: int = 0
     source: str = "unknown"
     complete: bool = True
+    provenance: str = "reconstructed"
+
+    def __post_init__(self) -> None:
+        if self.close_time <= self.open_time: raise ValueError("candle close_time must follow open_time")
+        if self.high < max(self.open,self.close,self.low): raise ValueError("candle high is below OHLC value")
+        if self.low > min(self.open,self.close,self.high): raise ValueError("candle low is above OHLC value")
+        if self.provenance not in {"native","reconstructed"}: raise ValueError("invalid candle provenance")
 
 
 @dataclass(frozen=True, kw_only=True)

@@ -30,6 +30,10 @@ def parser() -> argparse.ArgumentParser:
     walk=subs.add_parser("walk-forward");walk.add_argument("dataset",type=Path);walk.add_argument("--train",type=int,required=True);walk.add_argument("--test",type=int,required=True)
     subs.add_parser("doctor")
     subs.add_parser("gui")
+    importer=subs.add_parser("import-twelvedata",help="convert a local Twelve Data time_series JSON file to native OHLC JSONL")
+    importer.add_argument("input",type=Path);importer.add_argument("output",type=Path);importer.add_argument("--instrument",required=True);importer.add_argument("--interval",default="1min",choices=["1min","5min","15min","1h"]);importer.add_argument("--timezone",default="UTC")
+    macro_merge=subs.add_parser("add-macro-event",help="merge a scheduled economic event into replay JSONL")
+    macro_merge.add_argument("input",type=Path);macro_merge.add_argument("output",type=Path);macro_merge.add_argument("--timestamp",required=True);macro_merge.add_argument("--event-id",required=True);macro_merge.add_argument("--title",required=True);macro_merge.add_argument("--source",default="federal_reserve");macro_merge.add_argument("--region",default="US");macro_merge.add_argument("--instrument",default="EURUSD")
     return result
 
 
@@ -54,6 +58,12 @@ def main() -> None:
     if args.command=="gui":
         from feline.gui.app import run_gui
         run_gui();return
+    if args.command=="import-twelvedata":
+        from feline.replay.twelvedata import convert_twelvedata_file
+        count=convert_twelvedata_file(args.input,args.output,args.instrument,args.interval,args.timezone);print(json.dumps({"candles":count,"output":str(args.output),"timestamp_semantics":"provider datetime=open_time; replay timestamp=close_time"},indent=2));return
+    if args.command=="add-macro-event":
+        from feline.replay.twelvedata import add_economic_event
+        count=add_economic_event(args.input,args.output,args.timestamp,args.event_id,args.title,args.source,args.region,args.instrument);print(json.dumps({"events":count,"output":str(args.output)},indent=2));return
     if stop_file.exists():
         raise SystemExit("Emergency stop is active (data/EMERGENCY_STOP).")
     if args.command=="replay":
@@ -91,7 +101,7 @@ def main() -> None:
         finally:
             await runtime.stop()
             runtime.database.close()
-    print("Feline Exchange v0.8.1 starting in PAPER/RESEARCH mode (no live broker exists).")
+    print("Feline Exchange v0.8.2 starting in PAPER/RESEARCH mode (no live broker exists).")
     asyncio.run(execute())
 
 

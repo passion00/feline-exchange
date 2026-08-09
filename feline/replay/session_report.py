@@ -5,7 +5,7 @@ import json,subprocess
 from pathlib import Path
 from feline import __version__
 
-SCHEMA_VERSION="1.0"
+SCHEMA_VERSION="1.1"
 
 def file_checksum(path:Path)->str:
  digest=sha256()
@@ -17,11 +17,17 @@ def git_commit()->str|None:
  try:return subprocess.run(["git","rev-parse","HEAD"],capture_output=True,text=True,timeout=2,check=True).stdout.strip()
  except Exception:return None
 
-def build_replay_report(session:dict,snapshot:dict,records:dict)->dict:
+def _build_replay_report_base(session:dict,snapshot:dict,records:dict)->dict:
  portfolio=snapshot.get("portfolio",{})
  macro=dict(snapshot.get("macro") or {})
  if macro:macro["actual_replay_timestamp"]=macro.get("scheduled_at")
  return {"schema_version":SCHEMA_VERSION,"metadata":{**session,"feline_version":__version__,"git_commit":git_commit(),"export_timestamp":datetime.now(timezone.utc).isoformat()},"macro_event":macro or None,"macro_analysis":{"phase_transitions":records.get("macro",[]),"shock":snapshot.get("shock"),"strategy":snapshot.get("strategy"),"abstentions":snapshot.get("abstentions",{})},"horizons":snapshot.get("horizons",{}),"signals":records.get("signals",[]),"risk":records.get("risk",[]),"orders":snapshot.get("orders",[]),"fills":snapshot.get("fills",[]),"trades":snapshot.get("trades",[]),"portfolio":{"starting_equity":session.get("starting_equity"),"ending_equity":portfolio.get("equity"),"realized_pnl":portfolio.get("realized_pnl"),"unrealized_pnl":portfolio.get("unrealized_pnl"),"exposure":portfolio.get("exposure"),"maximum_drawdown":portfolio.get("drawdown",0),"execution_costs":sum(float(x.get("commission",0) or 0)+float(x.get("spread_cost",0) or 0)+float(x.get("slippage_amount",0) or 0) for x in snapshot.get("fills",[]))},"ai":{"available":bool(snapshot.get("ai",{}).get("available")),"model":snapshot.get("ai",{}).get("model"),"analyses":records.get("ai",[])},"diagnostics":records.get("diagnostics",[]),"human_summary":summary_text(session,snapshot)}
+
+def build_replay_report(session:dict,snapshot:dict,records:dict)->dict:
+ report=_build_replay_report_base(session,snapshot,records);macro=report.get("macro_event") or {};candles=[x for x in records.get("candles",[]) if x.get("timeframe")==session.get("candle_timeframe")];reference={}
+ if candles and macro:
+  scheduled=datetime.fromisoformat(str(macro["scheduled_at"]));before=[x for x in candles if datetime.fromisoformat(x["timestamp"])<=scheduled];after=[x for x in candles if datetime.fromisoformat(x["timestamp"])>scheduled];reference={"pre_event":before[-1] if before else None,"announcement":after[0] if after else None,"stabilization":next((x for x in after if (datetime.fromisoformat(x["timestamp"])-scheduled).total_seconds()>=300),None)}
+ report["reference_candles"]=reference;return report
 
 def summary_text(session:dict,snapshot:dict)->str:
  strategy=snapshot.get("strategy",{});p=snapshot.get("portfolio",{});macro=snapshot.get("macro") or {}

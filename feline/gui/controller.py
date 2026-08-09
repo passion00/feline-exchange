@@ -9,18 +9,24 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from queue import Empty,Queue
 from feline.config import AppConfig
-from feline.core.events import Event,PriceTick,SignalEvent,RiskEvent,OrderUpdate,FillEvent,AIAnalysisResult,RegimeEvent,EconomicEvent
+from feline.core.events import CandleUpdate,Event,PriceTick,SignalEvent,RiskEvent,OrderUpdate,FillEvent,AIAnalysisResult,RegimeEvent,EconomicEvent
 from feline.replay.engine import CSVReplayProvider
 from feline.replay.mixed import read_mixed_events,replay_format
 from feline.macro.events import NormalizedEconomicEvent,ShockDetector,ShockState,event_phase,measure_horizon
 from feline.strategy.macro_event import MacroEventStrategy
 from feline.replay.session_report import build_replay_report,export_replay_report,file_checksum
 from feline.runtime import FelineRuntime
+from feline.market.candles import NativeCandleAggregator
 
 class ReplayState(str,Enum):STOPPED="stopped";RUNNING="running";PAUSED="paused"
 class ChartBuffer:
- def __init__(self,limit=5000):self.points=deque(maxlen=limit);self.markers=deque(maxlen=500);self.needs_fit=True
+ def __init__(self,limit=5000):self.points=deque(maxlen=limit);self.candles={x:deque(maxlen=limit) for x in ("1m","5m","15m","1h")};self.markers=deque(maxlen=500);self.needs_fit=True
  def add(self,timestamp,price):self.points.append((timestamp,price))
+ def add_candle(self,value):
+  series=self.candles[value["timeframe"]]
+  if series and series[-1]["open_timestamp"]==value["open_timestamp"]:series[-1]=value
+  else:series.append(value)
+  if not self.points or self.points[-1][0]!=value["close_timestamp"]:self.points.append((value["close_timestamp"],value["close"]))
  def consume_fit(self):value=self.needs_fit;self.needs_fit=False;return value
  def request_fit(self):self.needs_fit=True
 class EventProjection:
@@ -66,6 +72,7 @@ class WorkstationController:
   try:self.messages.put_nowait(item)
   except Exception:self.dropped+=1
  async def _event(self,event):
+  if isinstance(event,CandleUpdate):self._emit_candle(event);return
   category="MARKET" if isinstance(event,PriceTick) else "STRATEGY" if isinstance(event,SignalEvent) else "RISK" if isinstance(event,RiskEvent) else "ORDER" if isinstance(event,OrderUpdate) else "FILL" if isinstance(event,FillEvent) else "AI" if isinstance(event,AIAnalysisResult) else "SYSTEM"
   if isinstance(event,PriceTick):
    if self.session:self.session["replay_start_timestamp"]=self.session["replay_start_timestamp"] or event.timestamp.isoformat();self.session["replay_end_timestamp"]=event.timestamp.isoformat();self.session["instruments"]=sorted(set(self.session["instruments"]+[event.instrument]))
@@ -88,44 +95,55 @@ class WorkstationController:
    try:self.messages.get_nowait()
    except Empty:break
   self.macro=None;self.phase=None;self.shock=ShockState.CALM;self.strategy={"state":"WAITING_FOR_EVENT","reason":""};self.horizons={};self.abstentions={"evaluated":0,"trades":0,"no_trade":0};self._macro_samples=[];self.records={"signals":[],"risk":[],"macro":[],"ai":[],"diagnostics":[]};self.completed_snapshot=None
-  self.session={"replay_session_id":str(uuid4()),"dataset_path":str(Path(dataset).resolve()),"dataset_name":Path(dataset).name,"dataset_checksum":file_checksum(Path(dataset)),"replay_speed":speed,"seed":seed,"replay_start_timestamp":None,"replay_end_timestamp":None,"instruments":[],"strategy_configuration":{"mode":"macro_only" if kind=="jsonl" else "reference","reference_enabled":kind=="csv"},"risk_configuration":asdict(self.config.risk),"execution_assumptions":asdict(self.config.paper),"starting_equity":self.config.paper.initial_cash}
+  self.session={"replay_session_id":str(uuid4()),"dataset_path":str(Path(dataset).resolve()),"dataset_name":Path(dataset).name,"dataset_checksum":file_checksum(Path(dataset)),"replay_speed":speed,"seed":seed,"replay_start_timestamp":None,"replay_end_timestamp":None,"instruments":[],"strategy_configuration":{"mode":"macro_only" if kind=="jsonl" else "reference","reference_enabled":kind=="csv"},"risk_configuration":asdict(self.config.risk),"execution_assumptions":asdict(self.config.paper),"starting_equity":self.config.paper.initial_cash,"source_data_type":"tick","candle_timeframe":None,"providers":[],"ohlc_available":False,"volume_available":False,"spread_provenance":"provider bid/ask" if kind=="csv" else "fixture bid/ask","execution_bid_ask_synthetic":False}
   self.replay.configure(dataset,speed);self.replay.start();self.worker.start();provider=ControlledReplayProvider(dataset,speed,self.replay,seed) if kind=="csv" else None;runtime_config=self.config if kind=="csv" else replace(self.config,strategy=replace(self.config.strategy,enabled=False));self.runtime=FelineRuntime(runtime_config,provider=provider,recover=False,replay_session_id=self.session["replay_session_id"]);self.runtime.bus.subscribe(Event,self._event)
   self.runtime.database.save_replay_session(self.session,"running")
   async def run():
+   failure=None
    try:
     if kind=="csv":await self.runtime.run()
     else:await self._run_mixed(Path(dataset),speed)
+   except Exception as exc:
+    failure=exc;row={"kind":"diagnostic","severity":"error","summary":f"{type(exc).__name__}: {exc}","source_timestamp":self.session.get("replay_end_timestamp")};self._record("diagnostics",row);self._emit(row);raise
    finally:
     if kind=="jsonl":self.runtime.snapshot();self.runtime.database.persist_broker_state(self.runtime.broker)
-    self.replay.stop();self.completed_snapshot=self.snapshot();self.runtime.database.save_replay_session({**self.session,"result":build_replay_report(self.session,self.completed_snapshot,self.records)},"completed");self._emit({"kind":"state","state":"completed"})
+    self.replay.stop();self.completed_snapshot=self.snapshot();status="failed" if failure else "completed";self.runtime.database.save_replay_session({**self.session,"result":build_replay_report(self.session,self.completed_snapshot,self.records)},status);self._emit({"kind":"state","state":status})
   self.future=self.worker.submit(run());self._emit({"kind":"state","state":"running","dataset":dataset})
  async def _run_mixed(self,path,speed):
   from datetime import timedelta
-  events=read_mixed_events(path);previous_time=None;previous_price=None;detector=ShockDetector();strategy=MacroEventStrategy()
+  events=read_mixed_events(path);previous_time=None;previous_price=None;detector=ShockDetector();strategy=MacroEventStrategy();native_aggregator=NativeCandleAggregator()
   for index,event in enumerate(events):
    while self.replay.state is ReplayState.PAUSED and not self.replay._stop.is_set():await asyncio.sleep(.03)
    if self.replay._stop.is_set():break
-   timestamp=event.timestamp if isinstance(event,PriceTick) else event.scheduled_at
+   timestamp=event.timestamp if isinstance(event,(PriceTick,CandleUpdate)) else event.scheduled_at
    if previous_time and speed!="MAX":await asyncio.sleep(min(1.,max(0,(timestamp-previous_time).total_seconds()/float(speed))))
    previous_time=timestamp;self.session["replay_start_timestamp"]=self.session["replay_start_timestamp"] or timestamp.isoformat();self.session["replay_end_timestamp"]=timestamp.isoformat()
    if isinstance(event,NormalizedEconomicEvent):
     self.macro=event;self.phase=event_phase(event,timestamp).value;self.strategy={"state":"PRE_EVENT","reason":"scheduled macro event"};self._macro_samples=[] if previous_price is None else [(timestamp,previous_price,0.)];row={"kind":"macro","timestamp":timestamp.timestamp(),"source_timestamp":timestamp.isoformat(),"event":vars(event),"phase":self.phase};self._record("macro",row);self._emit(row);await self.runtime.bus.publish(EconomicEvent(timestamp=timestamp,name=event.title,event_type=event.event_type,importance=event.importance,scheduled_at=event.scheduled_at,replay_session_id=self.session["replay_session_id"]))
    else:
-    await self.runtime.handle_tick(event);price=event.mid
+    if isinstance(event,CandleUpdate):
+     self.session.update({"source_data_type":"native_ohlc","candle_timeframe":event.timeframe,"ohlc_available":True,"volume_available":self.session["volume_available"] or event.volume>0,"spread_provenance":"configured synthetic execution spread; provider OHLC is price/mid, not bid/ask","execution_bid_ask_synthetic":True});self.session["providers"]=sorted(set(self.session["providers"]+[event.source]));event=replace(event,replay_session_id=self.session["replay_session_id"]);execution_spread=self.config.paper.synthetic_spread_bps/10000;self.runtime.trades.update(event.instrument,event.low*(1-execution_spread/2),event.low*(1+execution_spread/2));self.runtime.trades.update(event.instrument,event.high*(1-execution_spread/2),event.high*(1+execution_spread/2));tick=PriceTick(timestamp=event.close_time,instrument=event.instrument,bid=event.close*(1-execution_spread/2),ask=event.close*(1+execution_spread/2),volume=event.volume,source=f"{event.source}:synthetic_execution",replay_session_id=self.session["replay_session_id"]);await self.runtime.handle_tick(tick);await self.runtime.bus.publish(event);price=event.close;high=event.high;low=event.low;spread_ratio=tick.spread_ratio;self._emit_candle(event)
+     for aggregate in native_aggregator.update(event):await self.runtime.bus.publish(aggregate);self._emit_candle(aggregate)
+    else:await self.runtime.handle_tick(event);price=event.mid;high=low=price;spread_ratio=event.spread_ratio
     if event.instrument not in self.session["instruments"]:self.session["instruments"].append(event.instrument)
     if self.macro:
-     ret=0 if previous_price is None else price/previous_price-1;old=self.shock;self.shock=detector.update(ret,event.spread_ratio,ret);elapsed=(timestamp-self.macro.scheduled_at).total_seconds()/60
-     if old is ShockState.SHOCK and elapsed>=5 and event.spread_ratio<.003:self.shock=ShockState.STABILIZED
-     phase="stabilization" if self.shock is ShockState.STABILIZED and elapsed<=15 else event_phase(self.macro,timestamp,shock=self.shock).value;self._macro_samples.append((timestamp,price,event.spread_ratio));row={"kind":"macro_state","timestamp":timestamp.timestamp(),"source_timestamp":timestamp.isoformat(),"phase":phase,"shock":self.shock.value,"return":ret,"velocity":ret,"spread":event.spread_ratio,"instrument":event.instrument};self._record("macro",row);self._emit(row)
+     ret=0 if previous_price is None else price/previous_price-1;old=self.shock;self.shock=detector.update(ret,spread_ratio,ret);elapsed=(timestamp-self.macro.scheduled_at).total_seconds()/60
+     if old is ShockState.SHOCK and elapsed>=5 and spread_ratio<.003:self.shock=ShockState.STABILIZED
+     phase="stabilization" if self.shock is ShockState.STABILIZED and elapsed<=15 else event_phase(self.macro,timestamp,shock=self.shock).value;self._macro_samples.append((timestamp,price,spread_ratio,high,low));row={"kind":"macro_state","timestamp":timestamp.timestamp(),"source_timestamp":timestamp.isoformat(),"phase":phase,"shock":self.shock.value,"return":ret,"velocity":ret,"spread":spread_ratio,"instrument":event.instrument};self._record("macro",row);self._emit(row)
      if phase!=self.phase or self.shock!=old:self._emit({"kind":"marker","instrument":event.instrument,"timestamp":timestamp.timestamp(),"label":phase if phase!=self.phase else self.shock.value,"category":"MACRO"});self.phase=phase
      for horizon in (1,5,15,30,60):
       if horizon not in self.horizons and elapsed>=horizon:
        samples=[x for x in self._macro_samples if x[0]<=self.macro.scheduled_at+timedelta(minutes=horizon)]
-       if len(samples)>1:self.horizons[horizon]={**vars(measure_horizon([x[1] for x in samples],[x[2] for x in samples],horizon)),"replay_session_id":self.session["replay_session_id"],"macro_event_id":self.macro.event_id,"instrument":event.instrument}
+       if len(samples)>1:self.horizons[horizon]={**vars(measure_horizon([x[1] for x in samples],[x[2] for x in samples],horizon,[x[3] if len(x)>3 else x[1] for x in samples],[x[4] if len(x)>4 else x[1] for x in samples])),"replay_session_id":self.session["replay_session_id"],"macro_event_id":self.macro.event_id,"instrument":event.instrument}
      if (self.shock is ShockState.STABILIZED or elapsed>=5) and self.strategy["state"] not in {"CONTINUATION","MEAN_REVERSION","NO_TRADE"} and len(self._macro_samples)>=3:
-      initial=self._macro_samples[1][1]/self._macro_samples[0][1]-1;post=price/self._macro_samples[-2][1]-1;decision=strategy.evaluate(initial,post,self.shock,event.spread_ratio);self.abstentions["evaluated"]+=1;state=decision.outcome.value.upper();self.strategy={"state":state,"reason":decision.reason,"direction":decision.direction,"confidence":decision.confidence};self.abstentions["no_trade"]+=int(state=="NO_TRADE");row={"kind":"signal","timestamp":timestamp.isoformat(),"source_timestamp":timestamp.isoformat(),"instrument":event.instrument,"strategy":"macro_event","strategy_version":"0.8.1","source_event_id":self.macro.event_id,"outcome":state,"direction":decision.direction,"confidence":decision.confidence,"reason":decision.reason};self._record("signals",row);self._emit(row);self._emit({"kind":"marker","instrument":event.instrument,"timestamp":timestamp.timestamp(),"label":state,"category":"STRATEGY"})
+      initial=self._macro_samples[1][1]/self._macro_samples[0][1]-1;post=price/self._macro_samples[-2][1]-1;decision=strategy.evaluate(initial,post,self.shock,spread_ratio);self.abstentions["evaluated"]+=1;state=decision.outcome.value.upper();self.strategy={"state":state,"reason":decision.reason,"direction":decision.direction,"confidence":decision.confidence};self.abstentions["no_trade"]+=int(state=="NO_TRADE");row={"kind":"signal","timestamp":timestamp.isoformat(),"source_timestamp":timestamp.isoformat(),"instrument":event.instrument,"strategy":"macro_event","strategy_version":"0.8.1","source_event_id":self.macro.event_id,"outcome":state,"direction":decision.direction,"confidence":decision.confidence,"reason":decision.reason};self._record("signals",row);self._emit(row);self._emit({"kind":"marker","instrument":event.instrument,"timestamp":timestamp.timestamp(),"label":state,"category":"STRATEGY"})
     previous_price=price
    self._emit({"kind":"progress","index":index+1,"total":len(events),"timestamp":timestamp.isoformat()})
+  for aggregate in native_aggregator.flush():await self.runtime.bus.publish(aggregate);self._emit_candle(aggregate)
+ def _emit_candle(self,event):
+  row={"kind":"candle","instrument":event.instrument,"timeframe":event.timeframe,"timestamp":event.close_time.isoformat(),"open_timestamp":event.open_time.timestamp(),"close_timestamp":event.close_time.timestamp(),"open":event.open,"high":event.high,"low":event.low,"close":event.close,"volume":event.volume,"source":event.source,"provenance":event.provenance};existing=self.records.setdefault("candles",[])
+  if existing and existing[-1].get("instrument")==event.instrument and existing[-1].get("timeframe")==event.timeframe and existing[-1].get("open_timestamp")==row["open_timestamp"]:return
+  self._record("candles",row);self._emit(row)
  def pause(self):self.replay.pause();self._emit({"kind":"state","state":"paused"})
  def resume(self):self.replay.resume();self._emit({"kind":"state","state":"running"})
  def stop(self):

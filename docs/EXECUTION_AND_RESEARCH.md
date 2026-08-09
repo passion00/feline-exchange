@@ -1,5 +1,11 @@
 # Execution and research methodology
 
+## Historical OHLC semantics
+
+Native bars retain provider open, high, low, close, volume, source, timeframe, open time, and close time. They enter replay only at close time, so final intrabar extremes cannot leak at candle open. Tick-built bars are labeled `reconstructed`. Higher native timeframes use first open, maximum high, minimum low, final close, and summed volume, and are emitted only after the bucket completes.
+
+Provider OHLC is treated as price/mid OHLC, not bid/ask OHLC. Paper execution creates close-time bid/ask using the configured synthetic spread; report metadata records both assumptions. Close-to-close macro decisions remain unchanged. Native high/low improve horizon MAE/MFE only.
+
 Fills are deterministic for a configuration, dataset, and seed. Buy reference price is ask; sell reference price is bid. Directional slippage combines configured base, spread, size, and regime terms. Available quantity is `tick volume × liquidity_fraction`; zero/missing volume means unlimited synthetic liquidity. Each partial fill independently updates cash, costs, quantity, and weighted entry.
 
 Latency runs from acceptance to the executing quote while replay continues normally. Limit/stop conditions are evaluated after latency eligibility. Gaps execute at observed bid/ask plus slippage, never at an unavailable trigger price.
