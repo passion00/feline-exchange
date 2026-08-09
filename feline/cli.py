@@ -34,6 +34,7 @@ def parser() -> argparse.ArgumentParser:
     importer.add_argument("input",type=Path);importer.add_argument("output",type=Path);importer.add_argument("--instrument",required=True);importer.add_argument("--interval",default="1min",choices=["1min","5min","15min","1h"]);importer.add_argument("--timezone",default="UTC")
     macro_merge=subs.add_parser("add-macro-event",help="merge a scheduled economic event into replay JSONL")
     macro_merge.add_argument("input",type=Path);macro_merge.add_argument("output",type=Path);macro_merge.add_argument("--timestamp",required=True);macro_merge.add_argument("--event-id",required=True);macro_merge.add_argument("--title",required=True);macro_merge.add_argument("--source",default="federal_reserve");macro_merge.add_argument("--region",default="US");macro_merge.add_argument("--instrument",default="EURUSD")
+    research=subs.add_parser("research",help="historical macro research catalog and batch tools");research.add_argument("action",choices=["validate","inspect","run","summarize","import-directory"]);research.add_argument("paths",type=Path,nargs="+");research.add_argument("--instrument",default="EURUSD");research.add_argument("--interval",default="1min");research.add_argument("--timezone",default="UTC");research.add_argument("--output-root",type=Path,default=Path("data/reports/research"));research.add_argument("--fail-fast",action="store_true")
     return result
 
 
@@ -64,6 +65,24 @@ def main() -> None:
     if args.command=="add-macro-event":
         from feline.replay.twelvedata import add_economic_event
         count=add_economic_event(args.input,args.output,args.timestamp,args.event_id,args.title,args.source,args.region,args.instrument);print(json.dumps({"events":count,"output":str(args.output)},indent=2));return
+    if args.command=="research":
+        if args.action=="validate":
+            from feline.research.engine import validate_manifest
+            result=validate_manifest(args.paths[0])
+        elif args.action=="inspect":
+            from dataclasses import asdict
+            from feline.research.registry import inspect_dataset
+            result=asdict(inspect_dataset(args.paths[0],args.instrument))
+        elif args.action=="import-directory":
+            if len(args.paths)!=2:raise SystemExit("research import-directory requires INPUT_DIR OUTPUT_DIR")
+            from feline.replay.twelvedata import import_directory
+            result=import_directory(args.paths[0],args.paths[1],args.instrument,args.interval,args.timezone)
+        elif args.action=="summarize":
+            candidate=args.paths[0]/"experiment.json" if args.paths[0].is_dir() else args.paths[0];result=json.loads(candidate.read_text())
+        else:
+            from feline.research.engine import run_experiment
+            result=run_experiment(args.paths[0],config,args.output_root,args.fail_fast);result={"experiment":result["experiment"],"aggregate":result["aggregate"],"output_directory":result["output_directory"]}
+        print(json.dumps(result,indent=2,default=str));return
     if stop_file.exists():
         raise SystemExit("Emergency stop is active (data/EMERGENCY_STOP).")
     if args.command=="replay":
@@ -101,7 +120,7 @@ def main() -> None:
         finally:
             await runtime.stop()
             runtime.database.close()
-    print("Feline Exchange v0.8.2 starting in PAPER/RESEARCH mode (no live broker exists).")
+    print("Feline Exchange v0.9 starting in PAPER/RESEARCH mode (no live broker exists).")
     asyncio.run(execute())
 
 

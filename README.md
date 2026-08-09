@@ -1,6 +1,6 @@
-# Feline Exchange v0.8.2 — Native OHLC Replay and Candlestick Workstation
+# Feline Exchange v0.9 — Historical Macro Research Engine
 
-Feline Exchange is a local-first observer, deterministic execution/replay simulator, and research platform. Version 0.8.2 remains paper/research only.
+Feline Exchange is a local-first observer, deterministic execution/replay simulator, and historical macro research platform. Version 0.9 remains paper/research only. It batch-processes FOMC/ECB episodes without adding strategies or tuning the existing macro thresholds.
 
 v0.8 studies EUR/USD after Fed/ECB-style shocks, deliberately avoiding the initial announcement race. The Qt workstation opens CSV tick data and globally ordered mixed JSONL price/macro fixtures through one replay control. It models deterministic pre-event, announcement, shock, stabilization, post-event, and complete phases; research decisions classify continuation, mean reversion, or explicit NO_TRADE.
 
@@ -143,3 +143,19 @@ python3 -m feline gui
 The chart defaults to **Candles**, offers Line mode and 1m/5m/15m/1h selectors, and retains zoom, pan, Fit, instrument selection, date/time axes, and markers. Clicking a candle shows its completed O/H/L/C and volume.
 
 Horizon return, volatility, shock, and stabilization retain close-to-close semantics. Native OHLC lets horizon MAE use intrabar lows and MFE use intrabar highs; no strategy threshold was retuned. Provider OHLC is price/mid data—not historical bid/ask. Paper execution derives bid/ask from the configured synthetic spread, and reports label that assumption. Downloaded provider files remain local/ignored and subject to provider licensing terms.
+
+## Historical macro batch research
+
+Version 0.9 adds a JSON event manifest, checksum-backed dataset registry, episode builder, chronological TRAIN/VALIDATION/TEST membership, secondary-event contamination flags, seeded batch execution, and experiment exports. Batch runs use the unchanged `macro_event` strategy in `macro_only` mode; they measure the current system and do not optimize it.
+
+```bash
+python3 -m feline research validate tests/fixtures/research/manifest.json
+python3 -m feline research inspect tests/fixtures/macro_continuation.jsonl --instrument EURUSD
+python3 -m feline research run tests/fixtures/research/manifest.json --output-root data/reports/research
+python3 -m feline research summarize data/reports/research/EXPERIMENT_ID
+python3 -m feline research import-directory data/historical/raw data/historical/processed --instrument EURUSD --interval 1min
+```
+
+The workstation's **Run Research** action selects a manifest and runs outside the Qt thread. Its Research panel shows experiment ID, current event, completed/total, and exclusions; **Cancel Batch** preserves every committed episode.
+
+Each experiment directory contains `experiment.json`, `summary.md`, `events.csv`, `horizons.csv`, and `exclusions.csv`. Event data is processed one episode at a time. Native candles remain invisible until close, horizon outcomes are only computed after elapsed historical time, and TEST membership is explicit rather than randomly sampled. See [Historical research](docs/HISTORICAL_RESEARCH.md).

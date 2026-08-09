@@ -66,7 +66,7 @@ class Database:
             self.connection.commit()
 
     def count(self, table: str) -> int:
-        allowed = {"market_events", "news_events", "ai_analyses", "signals", "paper_orders", "paper_trades", "positions", "portfolio_snapshots", "risk_events", "system_events", "candles", "regime_events","fills","financing_charges","pending_orders","experiments","walk_forward_windows","replay_sessions"}
+        allowed = {"market_events", "news_events", "ai_analyses", "signals", "paper_orders", "paper_trades", "positions", "portfolio_snapshots", "risk_events", "system_events", "candles", "regime_events","fills","financing_charges","pending_orders","experiments","walk_forward_windows","replay_sessions","dataset_registry","research_experiments","research_episodes","event_results","aggregate_results","research_exclusions"}
         if table not in allowed:
             raise ValueError("Invalid table")
         return int(self.connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0])
@@ -143,6 +143,24 @@ class Database:
         with self.lock:
             self.connection.execute("INSERT INTO replay_sessions VALUES(?,?,?,?,?,?,?) ON CONFLICT(replay_session_id) DO UPDATE SET ended_at=excluded.ended_at,status=excluded.status,payload=excluded.payload",(session["replay_session_id"],session["dataset_path"],session["dataset_checksum"],session.get("replay_start_timestamp"),session.get("replay_end_timestamp"),status,json.dumps(session,default=str)))
             self.connection.commit()
+
+    def register_dataset(self,record)->None:
+        payload=json.dumps(__import__('dataclasses').asdict(record),default=str)
+        with self.lock:self.connection.execute("INSERT OR REPLACE INTO dataset_registry VALUES(?,?,?,?,?,?,?)",(record.checksum,record.path,record.provider,record.instrument,record.timeframe,payload,record.import_timestamp));self.connection.commit()
+
+    def save_research_experiment(self,experiment_id,status,created_at,manifest_checksum,payload)->None:
+        with self.lock:self.connection.execute("INSERT OR REPLACE INTO research_experiments VALUES(?,?,?,?,?)",(experiment_id,status,created_at,manifest_checksum,json.dumps(payload,default=str)));self.connection.commit()
+
+    def save_research_episode(self,experiment_id,episode,result,split,status,replay_session_id=None)->None:
+        payload=json.dumps(result,default=str)
+        with self.lock:
+            self.connection.execute("INSERT OR REPLACE INTO research_episodes VALUES(?,?,?,?,?,?,?)",(episode.episode_id,experiment_id,episode.entry.event.event_id,replay_session_id,status,split,payload))
+            if status=="excluded":self.connection.execute("INSERT OR REPLACE INTO research_exclusions VALUES(?,?,?,?)",(experiment_id,episode.entry.event.event_id,result.get("reason") or episode.exclusion_reason or "excluded",payload))
+            else:self.connection.execute("INSERT OR REPLACE INTO event_results VALUES(?,?,?)",(experiment_id,episode.entry.event.event_id,payload))
+            self.connection.commit()
+
+    def save_aggregate_result(self,experiment_id,result)->None:
+        with self.lock:self.connection.execute("INSERT OR REPLACE INTO aggregate_results VALUES(?,?)",(experiment_id,json.dumps(result,default=str)));self.connection.commit()
 
     def health(self) -> list[dict]:
         return [dict(row) for row in self.connection.execute("SELECT * FROM health_state ORDER BY component")]

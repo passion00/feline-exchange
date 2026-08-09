@@ -34,4 +34,13 @@ MIGRATIONS: tuple[str, ...] = (
     CREATE TABLE IF NOT EXISTS replay_sessions (replay_session_id TEXT PRIMARY KEY,dataset_path TEXT NOT NULL,dataset_checksum TEXT NOT NULL,started_at TEXT,ended_at TEXT,status TEXT NOT NULL,payload TEXT NOT NULL);
     CREATE INDEX IF NOT EXISTS idx_replay_sessions_started ON replay_sessions(started_at);
     """,
+    """
+    CREATE TABLE IF NOT EXISTS dataset_registry (checksum TEXT PRIMARY KEY,path TEXT NOT NULL,provider TEXT,instrument TEXT,timeframe TEXT,payload TEXT NOT NULL,registered_at TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS research_experiments (experiment_id TEXT PRIMARY KEY,status TEXT NOT NULL,created_at TEXT NOT NULL,manifest_checksum TEXT NOT NULL,payload TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS research_episodes (episode_id TEXT NOT NULL,experiment_id TEXT NOT NULL,event_id TEXT NOT NULL,replay_session_id TEXT,status TEXT NOT NULL,split TEXT NOT NULL,payload TEXT NOT NULL,PRIMARY KEY(experiment_id,episode_id));
+    CREATE TABLE IF NOT EXISTS event_results (experiment_id TEXT NOT NULL,event_id TEXT NOT NULL,payload TEXT NOT NULL,PRIMARY KEY(experiment_id,event_id));
+    CREATE TABLE IF NOT EXISTS aggregate_results (experiment_id TEXT PRIMARY KEY,payload TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS research_exclusions (experiment_id TEXT NOT NULL,event_id TEXT NOT NULL,reason TEXT NOT NULL,payload TEXT NOT NULL,PRIMARY KEY(experiment_id,event_id));
+    CREATE INDEX IF NOT EXISTS idx_research_episode_experiment ON research_episodes(experiment_id);
+    """,
 )

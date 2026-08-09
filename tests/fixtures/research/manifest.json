@@ -1,0 +1,16 @@
+{
+  "seed": 17,
+  "window_before_minutes": 1,
+  "window_after_minutes": 5,
+  "split": [0.5, 0.25, 0.25],
+  "contamination_policy": "flag",
+  "bootstrap_samples": 100,
+  "events": [
+    {"event_id":"fomc-cont","central_bank":"FOMC","event_type":"rate_decision","title":"Synthetic FOMC continuation","timestamp":"2026-03-01T19:00:00Z","instrument":"EURUSD","dataset_path":"../macro_continuation.jsonl","source":"synthetic"},
+    {"event_id":"fomc-revert","central_bank":"FOMC","event_type":"rate_decision","title":"Synthetic FOMC reversal","timestamp":"2026-03-02T19:00:00Z","instrument":"EURUSD","dataset_path":"../macro_mean_reversion.jsonl","source":"synthetic","secondary_events":[{"event_id":"fomc-press","central_bank":"FOMC","event_type":"press_conference","title":"Synthetic press conference","timestamp":"2026-03-02T19:03:00Z","instrument":"EURUSD","source":"synthetic","importance":"critical","relationship":"follow_up"}]},
+    {"event_id":"fomc-no-trade","central_bank":"FOMC","event_type":"rate_decision","title":"Synthetic FOMC no trade","timestamp":"2026-03-03T19:00:00Z","instrument":"EURUSD","dataset_path":"../macro_no_trade.jsonl","source":"synthetic"},
+    {"event_id":"ecb-cont","central_bank":"ECB","event_type":"rate_decision","title":"Synthetic ECB continuation","timestamp":"2023-06-15T12:15:00Z","instrument":"EURUSD","dataset_path":"ecb_continuation.jsonl","source":"synthetic"},
+    {"event_id":"ecb-revert","central_bank":"ECB","event_type":"rate_decision","title":"Synthetic ECB reversal","timestamp":"2023-07-27T12:15:00Z","instrument":"EURUSD","dataset_path":"ecb_reversal.jsonl","source":"synthetic"},
+    {"event_id":"insufficient","central_bank":"FOMC","event_type":"rate_decision","title":"Insufficient coverage example","timestamp":"2026-03-01T19:00:00Z","instrument":"EURUSD","dataset_path":"../macro_continuation.jsonl","source":"synthetic","window_after_minutes":60}
+  ]
+}

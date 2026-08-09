@@ -65,7 +65,7 @@ class ControlledReplayProvider(CSVReplayProvider):
 class WorkstationController:
  """Real runtime bridge. Qt polls bounded projections; core never waits for UI."""
  def __init__(self,config:AppConfig|None=None,limit=2000):
-  self.config=config or AppConfig();self.replay=ReplayController();self.worker=RuntimeThread();self.messages=Queue(maxsize=limit);self.runtime=None;self.future=None;self.selected_instrument=None;self.dropped=0;self.macro=None;self.phase=None;self.shock=ShockState.CALM;self.strategy={"state":"WAITING_FOR_EVENT","reason":""};self.horizons={};self.abstentions={"evaluated":0,"trades":0,"no_trade":0};self._macro_samples=[];self.session=None;self.records={};self.completed_snapshot=None
+  self.config=config or AppConfig();self.replay=ReplayController();self.worker=RuntimeThread();self.research_executor=ThreadPoolExecutor(max_workers=1,thread_name_prefix="feline-research");self.messages=Queue(maxsize=limit);self.runtime=None;self.future=None;self.research_future=None;self.research_cancel=threading.Event();self.selected_instrument=None;self.dropped=0;self.macro=None;self.phase=None;self.shock=ShockState.CALM;self.strategy={"state":"WAITING_FOR_EVENT","reason":""};self.horizons={};self.abstentions={"evaluated":0,"trades":0,"no_trade":0};self._macro_samples=[];self.session=None;self.records={};self.completed_snapshot=None
  def _emit(self,item):
   if self.session:item.setdefault("replay_session_id",self.session["replay_session_id"])
   item.setdefault("ingestion_timestamp",datetime.now(timezone.utc).isoformat())
@@ -76,7 +76,7 @@ class WorkstationController:
   category="MARKET" if isinstance(event,PriceTick) else "STRATEGY" if isinstance(event,SignalEvent) else "RISK" if isinstance(event,RiskEvent) else "ORDER" if isinstance(event,OrderUpdate) else "FILL" if isinstance(event,FillEvent) else "AI" if isinstance(event,AIAnalysisResult) else "SYSTEM"
   if isinstance(event,PriceTick):
    if self.session:self.session["replay_start_timestamp"]=self.session["replay_start_timestamp"] or event.timestamp.isoformat();self.session["replay_end_timestamp"]=event.timestamp.isoformat();self.session["instruments"]=sorted(set(self.session["instruments"]+[event.instrument]))
-   self._emit({"kind":"tick","timestamp":event.timestamp.timestamp(),"source_timestamp":event.timestamp.isoformat(),"instrument":event.instrument,"bid":event.bid,"ask":event.ask,"price":event.mid,"spread":event.spread_ratio})
+   row={"kind":"tick","timestamp":event.timestamp.isoformat(),"source_timestamp":event.timestamp.isoformat(),"instrument":event.instrument,"bid":event.bid,"ask":event.ask,"price":event.mid,"spread":event.spread_ratio};self._record("market",row);self._emit({**row,"timestamp":event.timestamp.timestamp()})
   elif not isinstance(event,RegimeEvent):
    row={"kind":"event","timestamp":event.timestamp.isoformat(),"source_timestamp":event.timestamp.isoformat(),"category":category,"instrument":getattr(event,"instrument",None),"summary":type(event).__name__,"payload":event.payload()};self._record(category.lower(),row);self._emit(row)
  def _record(self,category,item):
@@ -159,6 +159,14 @@ class WorkstationController:
   if not self.session or not self.completed_snapshot:raise RuntimeError("no completed replay result")
   return build_replay_report(self.session,self.completed_snapshot,self.records)
  def export_report(self,path):return export_replay_report(self.build_report(),Path(path))
+ def start_research(self,manifest,output_root="data/reports/research"):
+  if self.future and not self.future.done():raise RuntimeError("stop the active replay before batch research")
+  if self.research_future and not self.research_future.done():raise RuntimeError("research experiment already running")
+  from feline.research.engine import run_experiment
+  self.research_cancel.clear()
+  def progress(value):self._emit({"kind":"research",**value})
+  self.research_future=self.research_executor.submit(run_experiment,Path(manifest),self.config,Path(output_root),False,progress,self.research_cancel);return self.research_future
+ def cancel_research(self):self.research_cancel.set()
  def drain(self,maximum=250):
   result=[]
   for _ in range(maximum):
@@ -167,6 +175,10 @@ class WorkstationController:
   return result
  def shutdown(self):
   self.stop()
+  self.cancel_research()
+  if self.research_future:
+   try:self.research_future.result(timeout=5)
+   except Exception:pass
   if self.future:
    try:self.future.result(timeout=3)
    except Exception:pass
@@ -175,3 +187,4 @@ class WorkstationController:
    except Exception:pass
    self.runtime.database.close();self.runtime=None
   self.worker.stop()
+  self.research_executor.shutdown(wait=True,cancel_futures=True)

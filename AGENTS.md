@@ -5,7 +5,7 @@
 1. `~/lynx` is read-only. Never create, modify, move, rename, reformat, or delete anything there.
 2. LLM inference never blocks market collection, deterministic risk, paper execution, or portfolio monitoring.
 3. The deterministic risk engine overrides every strategy, signal, and AI hypothesis. No bypass is permitted.
-4. Feline v0.8.2 has no live broker implementation or real-order path. Paper/research mode is the only mode and default.
+4. Feline v0.9 has no live broker implementation or real-order path. Paper/research mode is the only mode and default.
 21. GUI projections are bounded and lossy by design; the core event/audit path is authoritative and never waits for rendering.
 16. A simulated execution commit is atomic across fills, order state, cash, positions, pending quantity, and protective state.
 17. Duplicate fill identifiers are idempotent and impossible state transitions are rejected.
@@ -23,6 +23,8 @@
 13. Replay randomness is explicitly seeded; experiments record data, configuration, seed and results.
 14. Provider credentials use named environment variables only and never enter events, prompts, logs, databases, or tracked configuration.
 15. Metrics services are loopback-only and read-only, with no trading or risk-control routes.
+22. Batch macro research is episode-by-episode, chronologically partitioned, seeded, and checksum-addressed; future outcomes never enter decision-time state.
+23. Secondary macro events flag or censor affected horizons but never silently replace the primary event.
 
 ## Architecture
 
