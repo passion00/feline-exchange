@@ -114,6 +114,7 @@ class AIWorker:
 
     async def stop(self) -> None:
         if self.task:
-            self.sequence+=1; await self.queue.put((99,self.sequence,None))
-            await self.task
+            if not self.task.done():self.sequence+=1; await self.queue.put((99,self.sequence,None))
+            try:await self.task
+            except asyncio.CancelledError:pass
             self.task = None

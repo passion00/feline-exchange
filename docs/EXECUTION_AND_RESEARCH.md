@@ -23,3 +23,5 @@ Mixed JSONL replay stores timestamped price and normalized economic records and 
 ## Qt workstation
 
 PySide6 and pyqtgraph are declared project dependencies. Qt owns rendering only; a dedicated controller thread owns an asyncio loop for core/replay tasks. Chart and event buffers are bounded. AI Opinion, strategy signal, and deterministic risk decision are separate surfaces. Emergency stop writes the same persistent core marker after confirmation; it cannot clear or weaken risk. Manual KDE validation: install editable, run `python3 -m feline gui`, open the Fed JSONL fixture, select a slow speed, verify resizing/zoom/pan/pause, then confirm emergency-stop behavior.
+
+v0.7's workstation controller constructs the same `FelineRuntime` used by CLI replay, subscribes to typed events, and publishes bounded projections. The GUI never calls the broker or strategy. CSV replay is fully connected; mixed macro JSONL remains a research reader pending runtime-provider unification.

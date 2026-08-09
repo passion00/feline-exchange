@@ -1,5 +1,9 @@
 import asyncio,time,unittest
 from feline.gui.controller import ChartBuffer,EventProjection,ReplayController,ReplayState,RuntimeThread
+from feline.gui.controller import WorkstationController
+from feline.config import AppConfig
+from pathlib import Path
+import tempfile
 from feline.gui.viewmodel import DashboardViewModel
 
 class WorkstationTests(unittest.TestCase):
@@ -18,3 +22,6 @@ class WorkstationTests(unittest.TestCase):
    time.sleep(.01)
   async def value():return 7
   self.assertEqual(controller.submit(value()).result(1),7);controller.stop();self.assertFalse(hasattr(DashboardViewModel(),"submit_order"))
+ def test_real_runtime_replay_projection_and_restart(self):
+  with tempfile.TemporaryDirectory() as d:
+   c=WorkstationController(AppConfig(database_path=str(Path(d)/"gui.db")));c.start_replay("tests/fixtures/sample_ticks.csv","MAX");c.future.result(3);messages=c.drain(1000);self.assertTrue(any(x["kind"]=="tick" for x in messages));snap=c.snapshot();self.assertIn("EURUSD",snap["prices"]);self.assertIn("portfolio",snap);self.assertIn("risk",snap);c.start_replay("tests/fixtures/multi_ticks.csv","MAX");c.future.result(3);self.assertEqual(set(c.snapshot()["prices"]),{"EURUSD","GBPUSD"});c.shutdown()

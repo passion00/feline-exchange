@@ -1,10 +1,10 @@
-# Feline Exchange v0.6 — Qt Trading Workstation
+# Feline Exchange v0.7 — Live Workstation Integration
 
 Feline Exchange is a local-first observer, deterministic execution/replay simulator, and research platform. Version 0.6 remains paper/research only.
 
 v0.5 studies EUR/USD after Fed/ECB-style shocks, deliberately avoiding the initial announcement race. It models deterministic pre-event, announcement, shock, stabilization, post-event, and complete phases; research decisions classify continuation, mean reversion, or explicit NO_TRADE.
 
-Install with `python3 -m pip install -e .`, then launch the PySide6/pyqtgraph workstation with `python3 -m feline gui`. It is unmistakably PAPER / RESEARCH ONLY. Runtime/replay coroutines use a dedicated worker executor; Qt receives bounded projections only. The workstation provides resizable watchlist/macro/provider panels, a high-performance zoomable chart, portfolio/risk/regime/AI panes, bottom event/order/trade tabs, replay dataset/speed controls, Ctrl+O, Space pause/resume, persisted window size, and confirmed emergency stop.
+Install with `python3 -m pip install -e .`, then launch with `python3 -m feline gui`. Open a CSV fixture, choose speed, and Start. The real `FelineRuntime` runs in a worker executor; typed events enter a bounded, nonblocking projection queue. Qt renders actual prices, watchlist values, portfolio, risk, AI availability, and filtered event history. Pause/resume/stop and consecutive replays work without restarting. Emergency stop activates both the in-process risk kill switch and persistent marker. Rendering is deliberately lossy under pressure; SQLite/core processing remains authoritative.
 
 Execution persistence uses one SQLite `BEGIN IMMEDIATE` boundary for order state, idempotent fills, cash, positions, remaining quantities, and protective state. `python3 -m feline doctor` performs read-only integrity diagnostics.
 

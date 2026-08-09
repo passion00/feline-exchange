@@ -1,0 +1,4 @@
+{"type":"price","timestamp":"2026-03-02T18:59:00Z","instrument":"EURUSD","bid":1.0999,"ask":1.1001}
+{"type":"economic","timestamp":"2026-03-02T19:00:00Z","id":"fed-revert","source":"federal_reserve","region":"US","event_type":"fomc","title":"Synthetic mean reversion event","importance":"critical","instruments":["EURUSD"]}
+{"type":"price","timestamp":"2026-03-02T19:00:20Z","instrument":"EURUSD","bid":1.0790,"ask":1.0810}
+{"type":"price","timestamp":"2026-03-02T19:05:00Z","instrument":"EURUSD","bid":1.0948,"ask":1.0952}

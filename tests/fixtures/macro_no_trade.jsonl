@@ -1,0 +1,4 @@
+{"type":"price","timestamp":"2026-03-03T18:59:00Z","instrument":"EURUSD","bid":1.0999,"ask":1.1001}
+{"type":"economic","timestamp":"2026-03-03T19:00:00Z","id":"fed-abstain","source":"federal_reserve","region":"US","event_type":"fomc","title":"Synthetic unstable event","importance":"critical","instruments":["EURUSD"]}
+{"type":"price","timestamp":"2026-03-03T19:00:20Z","instrument":"EURUSD","bid":1.0700,"ask":1.0900}
+{"type":"price","timestamp":"2026-03-03T19:05:00Z","instrument":"EURUSD","bid":1.0600,"ask":1.1000}
