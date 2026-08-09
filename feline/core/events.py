@@ -49,6 +49,7 @@ class Event:
     id: str = field(default_factory=lambda: str(uuid4()))
     timestamp: datetime = field(default_factory=utc_now)
     correlation_id: str | None = None
+    replay_session_id: str | None = None
 
     def payload(self) -> dict[str, Any]:
         def encode(item: Any) -> Any:

@@ -1,0 +1,8 @@
+{"type":"price","timestamp":"2024-09-18T17:59:00Z","instrument":"EURUSD","bid":1.1119,"ask":1.1121}
+{"type":"economic","timestamp":"2024-09-18T18:00:00Z","id":"fomc-2024-synthetic","source":"federal_reserve","region":"US","event_type":"fomc","title":"Synthetic September 2024 FOMC decision","importance":"critical","previous":5.5,"consensus":5.25,"actual":5.0,"unit":"percent","instruments":["EURUSD"]}
+{"type":"price","timestamp":"2024-09-18T18:00:20Z","instrument":"EURUSD","bid":1.1190,"ask":1.1210}
+{"type":"price","timestamp":"2024-09-18T18:01:00Z","instrument":"EURUSD","bid":1.1178,"ask":1.1182}
+{"type":"price","timestamp":"2024-09-18T18:05:00Z","instrument":"EURUSD","bid":1.1148,"ask":1.1152}
+{"type":"price","timestamp":"2024-09-18T18:15:00Z","instrument":"EURUSD","bid":1.1168,"ask":1.1172}
+{"type":"price","timestamp":"2024-09-18T18:30:00Z","instrument":"EURUSD","bid":1.1188,"ask":1.1192}
+{"type":"price","timestamp":"2024-09-18T19:00:00Z","instrument":"EURUSD","bid":1.1208,"ask":1.1212}

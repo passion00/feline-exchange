@@ -66,7 +66,7 @@ class Database:
             self.connection.commit()
 
     def count(self, table: str) -> int:
-        allowed = {"market_events", "news_events", "ai_analyses", "signals", "paper_orders", "paper_trades", "positions", "portfolio_snapshots", "risk_events", "system_events", "candles", "regime_events","fills","financing_charges","pending_orders","experiments","walk_forward_windows"}
+        allowed = {"market_events", "news_events", "ai_analyses", "signals", "paper_orders", "paper_trades", "positions", "portfolio_snapshots", "risk_events", "system_events", "candles", "regime_events","fills","financing_charges","pending_orders","experiments","walk_forward_windows","replay_sessions"}
         if table not in allowed:
             raise ValueError("Invalid table")
         return int(self.connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0])
@@ -137,6 +137,11 @@ class Database:
     def save_health(self, component: str, status: str, details: dict | None = None) -> None:
         with self.lock:
             self.connection.execute("INSERT INTO health_state VALUES (?,?,datetime('now'),?) ON CONFLICT(component) DO UPDATE SET status=excluded.status,updated_at=excluded.updated_at,details=excluded.details", (component,status,json.dumps(details or {})))
+            self.connection.commit()
+
+    def save_replay_session(self,session:dict,status:str)->None:
+        with self.lock:
+            self.connection.execute("INSERT INTO replay_sessions VALUES(?,?,?,?,?,?,?) ON CONFLICT(replay_session_id) DO UPDATE SET ended_at=excluded.ended_at,status=excluded.status,payload=excluded.payload",(session["replay_session_id"],session["dataset_path"],session["dataset_checksum"],session.get("replay_start_timestamp"),session.get("replay_end_timestamp"),status,json.dumps(session,default=str)))
             self.connection.commit()
 
     def health(self) -> list[dict]:

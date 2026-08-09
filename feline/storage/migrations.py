@@ -30,4 +30,8 @@ MIGRATIONS: tuple[str, ...] = (
     CREATE TABLE IF NOT EXISTS walk_forward_windows (id INTEGER PRIMARY KEY AUTOINCREMENT,experiment_id TEXT NOT NULL,train_start TEXT,train_end TEXT,test_start TEXT,test_end TEXT,result TEXT);
     CREATE TABLE IF NOT EXISTS trades (trade_id TEXT PRIMARY KEY,instrument TEXT NOT NULL,status TEXT NOT NULL,entry_time TEXT NOT NULL,exit_time TEXT,payload TEXT NOT NULL);
     """,
+    """
+    CREATE TABLE IF NOT EXISTS replay_sessions (replay_session_id TEXT PRIMARY KEY,dataset_path TEXT NOT NULL,dataset_checksum TEXT NOT NULL,started_at TEXT,ended_at TEXT,status TEXT NOT NULL,payload TEXT NOT NULL);
+    CREATE INDEX IF NOT EXISTS idx_replay_sessions_started ON replay_sessions(started_at);
+    """,
 )

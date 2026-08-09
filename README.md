@@ -1,6 +1,6 @@
-# Feline Exchange v0.8 — Macro Research Workstation Completion
+# Feline Exchange v0.8.1 — Replay Isolation, Timestamp Integrity and Report Export
 
-Feline Exchange is a local-first observer, deterministic execution/replay simulator, and research platform. Version 0.8 remains paper/research only.
+Feline Exchange is a local-first observer, deterministic execution/replay simulator, and research platform. Version 0.8.1 remains paper/research only.
 
 v0.8 studies EUR/USD after Fed/ECB-style shocks, deliberately avoiding the initial announcement race. The Qt workstation opens CSV tick data and globally ordered mixed JSONL price/macro fixtures through one replay control. It models deterministic pre-event, announcement, shock, stabilization, post-event, and complete phases; research decisions classify continuation, mean reversion, or explicit NO_TRADE.
 
@@ -117,3 +117,15 @@ Feline adapts Lynx's useful patterns rather than copying its project: local Open
 The existing dark Qt layout is retained. `Open Dataset` accepts CSV ticks and the `fed_macro`, `macro_continuation`, `macro_mean_reversion`, and `macro_no_trade` JSONL fixtures. Watchlist clicks select the chart without resetting replay. The chart fits once on first data, dataset reset, or instrument switch; `Fit` restores automatic range after manual zoom/pan. Horizon values appear progressively and remain `not reached` until measured.
 
 Signals, simulated orders/fills, durable completed trades, diagnostics, portfolio, risk, AI availability, and NO_TRADE counts are projected from runtime state. Closing the window stops workers and closes SQLite. Qt has no broker, strategy, or risk authority.
+
+## Replay sessions and reports
+
+Every replay receives a persisted UUID plus dataset SHA-256, historical source-time range, instruments, strategy mode, risk configuration, and execution assumptions. Starting another replay clears only transient GUI projections. SQLite research history is retained but is never merged into the active Signals, Orders/Fills, Completed Trades, Horizons, markers, or diagnostics views. Mixed macro JSONL runs default to `macro_only`, disabling reference-strategy order generation for that session; generic CSV replay retains the reference strategy.
+
+After completion, **Export Replay Report** writes a non-overwriting JSON report and concise Markdown companion. Both contain the active session only. The CLI uses the same builder:
+
+```bash
+python3 -m feline replay tests/fixtures/fomc_2024_synthetic.jsonl --speed max --report data/reports/fomc_2024.json
+```
+
+Projected rows distinguish historical `source_timestamp` from wall-clock `ingestion_timestamp`. The latter is audit metadata and is never displayed as the historical event time.

@@ -6,7 +6,7 @@ from pathlib import Path
 
 from feline.config import AppConfig
 from feline.core.bus import EventBus
-from feline.core.events import AIAnalysisResult, CandleUpdate, EconomicEvent, EmergencyEvent,FillEvent,FinancingEvent, NewsEvent, OrderRequest, PortfolioSnapshot, PriceTick, Regime, RegimeEvent, SignalEvent
+from feline.core.events import AIAnalysisResult, CandleUpdate, EconomicEvent, EmergencyEvent,FillEvent,FinancingEvent, NewsEvent, OrderRequest, PortfolioSnapshot, PriceTick, Regime, RegimeEvent, RiskEvent, SignalEvent
 from feline.execution.paper import PaperBroker
 from feline.intelligence.service import AIWorker, AnalysisJob, LlamaCppClient
 from feline.market.providers import MarketDataProvider, MockMarketDataProvider
@@ -23,8 +23,9 @@ from feline.portfolio.trades import ExitReason,TradeLifecycle
 
 
 class FelineRuntime:
-    def __init__(self, config: AppConfig, provider: MarketDataProvider | None = None, ai_client=None, recover: bool = True) -> None:
+    def __init__(self, config: AppConfig, provider: MarketDataProvider | None = None, ai_client=None, recover: bool = True, replay_session_id: str | None = None) -> None:
         self.config = config
+        self.replay_session_id = replay_session_id
         self.bus = EventBus()
         self.broker = PaperBroker(config=config.paper)
         self.risk = RiskEngine(config.risk)
@@ -39,6 +40,7 @@ class FelineRuntime:
         self.trades=TradeLifecycle()
         self.news_pipeline = NewsPipeline()
         self.tick_count = 0
+        self.last_market_timestamp = None
         self.peak_equity = config.paper.initial_cash
         self.equity_history: list[float] = []
         self.trade_pnls: list[float] = []
@@ -55,14 +57,18 @@ class FelineRuntime:
         self.database.save_health("news_provider","not_configured",{})
         self.database.save_health("economic_calendar","not_configured",{})
         self.database.save_health("ai","unknown",{"queue_depth":0})
-        for event_type in (PriceTick, CandleUpdate, RegimeEvent, SignalEvent, AIAnalysisResult, EmergencyEvent):
+        for event_type in (PriceTick, CandleUpdate, RegimeEvent, SignalEvent, RiskEvent, AIAnalysisResult, EmergencyEvent):
             self.bus.subscribe(event_type, self._persist)
 
     async def _persist(self, event) -> None:
+        if self.replay_session_id and getattr(event,"replay_session_id",None) is None:event=__import__('dataclasses').replace(event,replay_session_id=self.replay_session_id)
         self.database.persist_event(event)
         if isinstance(event,AIAnalysisResult):self.database.save_health("ai","available" if event.available else "unavailable",{"queue_depth":self.ai.queue.qsize(),"error":event.error})
 
     async def handle_tick(self, tick: PriceTick) -> None:
+        if self.replay_session_id and tick.replay_session_id != self.replay_session_id:
+            tick = __import__('dataclasses').replace(tick,replay_session_id=self.replay_session_id)
+        self.last_market_timestamp=tick.timestamp
         self.trades.update(tick.instrument,tick.bid,tick.ask)
         before_realized=sum(p.realized_pnl for p in self.broker.positions.values())
         protective_updates=await self.broker.process_quote(tick)
@@ -89,7 +95,7 @@ class FelineRuntime:
                 await self.bus.publish(signal)
                 portfolio=self.broker.portfolio_state(); quantity,stop,target=self.strategy.order_from_signal(signal,portfolio["equity"])
                 allocated=self.allocator.allocate(signal,portfolio["equity"],portfolio["cash"],portfolio["exposure"]);quantity=min(quantity,allocated)
-                order=OrderRequest(instrument=signal.instrument,side=signal.side,quantity=quantity,expected_price=signal.price,stop_price=stop,take_profit_price=target,signal_id=signal.id,correlation_id=signal.id,timestamp=signal.timestamp)
+                order=OrderRequest(instrument=signal.instrument,side=signal.side,quantity=quantity,expected_price=signal.price,stop_price=stop,take_profit_price=target,signal_id=signal.id,correlation_id=signal.id,timestamp=signal.timestamp,replay_session_id=self.replay_session_id)
                 await self.request_order(order)
         self.tick_count+=1
         portfolio=self.broker.portfolio_state(); self.peak_equity=max(self.peak_equity,portfolio["equity"]); self.equity_history.append(portfolio["equity"])
@@ -102,7 +108,7 @@ class FelineRuntime:
 
     async def request_order(self, order: OrderRequest):
         decision = self.risk.approve_order(order, self.broker.get_quote(order.instrument), self.broker.get_positions())
-        self.database.persist_event(decision)
+        await self.bus.publish(decision)
         if not decision.approved:
             return decision
         before=sum(p.realized_pnl for p in self.broker.positions.values());before_quantity=self.broker.positions.get(order.instrument).quantity if order.instrument in self.broker.positions else 0
@@ -110,7 +116,7 @@ class FelineRuntime:
         new_fills=self.broker.fills[self._persisted_fill_count:]
         after=sum(p.realized_pnl for p in self.broker.positions.values())
         after_quantity=self.broker.positions.get(order.instrument).quantity if order.instrument in self.broker.positions else 0
-        if before_quantity==0 and after_quantity!=0 and new_fills:self.trades.start(order.instrument,"long" if after_quantity>0 else "short","reference","0.5.0",order.signal_id,new_fills[0].timestamp,abs(after_quantity),new_fills[0].fill_price)
+        if before_quantity==0 and after_quantity!=0 and new_fills:self.trades.start(order.instrument,"long" if after_quantity>0 else "short","reference",ReferenceStrategy.VERSION,order.signal_id,new_fills[0].timestamp,abs(after_quantity),new_fills[0].fill_price)
         elif before_quantity!=0 and after_quantity==0 and order.instrument in self.trades.open and new_fills:self.trades.close(order.instrument,new_fills[-1].timestamp,new_fills[-1].fill_price,ExitReason.STRATEGY,sum(f.commission+f.spread_cost+f.slippage_amount for f in new_fills))
         if after != before:self.trade_pnls.append(after-before)
         self.database.commit_execution(self.broker,new_fills,[update])
@@ -129,7 +135,7 @@ class FelineRuntime:
 
     def snapshot(self) -> PortfolioSnapshot:
         state=self.broker.portfolio_state(); drawdown=(self.peak_equity-state["equity"])/self.peak_equity if self.peak_equity else 0
-        event=PortfolioSnapshot(cash=state["cash"],equity=state["equity"],realized_pnl=state["realized_pnl"],unrealized_pnl=state["unrealized_pnl"],exposure=state["exposure"],peak_equity=self.peak_equity,drawdown=drawdown,trading_state="kill_switch" if self.risk.kill_switch else "enabled",positions={key:{"quantity":p.quantity,"average_price":p.average_price,"realized_pnl":p.realized_pnl} for key,p in self.broker.positions.items()})
+        event=PortfolioSnapshot(timestamp=self.last_market_timestamp or __import__('datetime').datetime.now(__import__('datetime').timezone.utc),replay_session_id=self.replay_session_id,cash=state["cash"],equity=state["equity"],realized_pnl=state["realized_pnl"],unrealized_pnl=state["unrealized_pnl"],exposure=state["exposure"],peak_equity=self.peak_equity,drawdown=drawdown,trading_state="kill_switch" if self.risk.kill_switch else "enabled",positions={key:{"quantity":p.quantity,"average_price":p.average_price,"realized_pnl":p.realized_pnl} for key,p in self.broker.positions.items()})
         self.database.persist_event(event);return event
 
     async def run(self, duration: float | None = None) -> None:

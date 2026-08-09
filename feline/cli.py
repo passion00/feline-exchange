@@ -56,6 +56,12 @@ def main() -> None:
         run_gui();return
     if stop_file.exists():
         raise SystemExit("Emergency stop is active (data/EMERGENCY_STOP).")
+    if args.command=="replay":
+        from feline.gui.controller import WorkstationController
+        controller=WorkstationController(config);controller.start_replay(str(args.csv),"MAX" if str(args.speed).lower()=="max" else args.speed,args.seed);controller.future.result();report=controller.build_report()
+        if args.report:
+            created=controller.export_report(args.report);report["exported_files"]=[str(x) for x in created]
+        print(json.dumps(report,indent=2,default=str));controller.shutdown();return
     if args.command in {"experiment","walk-forward"}:
         from feline.storage.database import Database
         db=Database(Path(config.database_path))
@@ -77,23 +83,16 @@ def main() -> None:
             for window in windows:db.save_walk_forward(exp.experiment_id,window,{"separated":True})
             db.save_experiment(exp,"completed",{"windows":len(windows)});print(json.dumps({"experiment_id":exp.experiment_id,"windows":windows},indent=2))
         db.close();return
-    provider=CSVReplayProvider(args.csv,args.speed,args.seed) if args.command=="replay" else None
+    provider=None
     runtime = FelineRuntime(config,provider=provider,recover=args.command!="replay")
     async def execute() -> None:
         try:
             await runtime.run(getattr(args,"duration",None))
-            if args.command=="replay":await runtime.finalize_replay()
         finally:
             await runtime.stop()
             runtime.database.close()
-    print("Feline Exchange v0.8 starting in PAPER/RESEARCH mode (no live broker exists).")
+    print("Feline Exchange v0.8.1 starting in PAPER/RESEARCH mode (no live broker exists).")
     asyncio.run(execute())
-    if args.command=="replay":
-        costs=runtime.broker.portfolio_state();costs["turnover"]=sum(f.gross_value for f in runtime.broker.fills)
-        report=calculate_report(config.paper.initial_cash,runtime.equity_history,runtime.trade_pnls,runtime.exposure_samples,runtime.tick_count,costs,config.paper.replay_end_policy)
-        encoded=json.dumps(report.to_dict(),indent=2)
-        if args.report: args.report.write_text(encoded+"\n",encoding="utf-8")
-        print(encoded)
 
 
 if __name__ == "__main__":
