@@ -64,7 +64,7 @@ def validate_twelvedata_payload(payload:dict,event_time:datetime)->dict:
 class TwelveDataDownloader:
  def __init__(self,api_key=None,transport=None,retries=3,minimum_interval=8.):self.api_key=api_key or os.environ.get("FELINE_TWELVE_DATA_API_KEY");self.transport=transport or self._http;self.retries=retries;self.minimum_interval=minimum_interval;self._last=0.
  def _http(self,url,timeout):
-  with request.urlopen(request.Request(url,headers={"User-Agent":"FelineExchange/0.15.0 research"}),timeout=timeout) as response:return json.loads(response.read())
+  with request.urlopen(request.Request(url,headers={"User-Agent":"FelineExchange/0.16.0 research"}),timeout=timeout) as response:return json.loads(response.read())
  def query(self,instrument,start,end):
   if not self.api_key:raise RuntimeError("FELINE_TWELVE_DATA_API_KEY is not set")
   symbol=instrument[:3]+"/"+instrument[3:];query=parse.urlencode({"symbol":symbol,"interval":"1min","start_date":start.strftime("%Y-%m-%d %H:%M:%S"),"end_date":end.strftime("%Y-%m-%d %H:%M:%S"),"timezone":"UTC","outputsize":5000,"apikey":self.api_key});url="https://api.twelvedata.com/time_series?"+query;error=None

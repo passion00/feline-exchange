@@ -1,5 +1,7 @@
 # Realtime paper ingestion
 
+Feline v0.16 routes GUI broker connections through the discoverable adapter boundary; see [Broker Adapters](BROKER_ADAPTERS.md). Internal PaperBroker and external OANDA practice execution remain explicitly distinct.
+
 In v0.14, realtime paper mode may asynchronously request structured AI confirmation for deterministic signals. This does not change ingestion, completed-candle, feed-health, risk, or PaperBroker authority; see [AI Integration](AI_INTEGRATION.md).
 
 Feline v0.13 uses the read-only OANDA v20 pricing stream as its primary FX
@@ -17,7 +19,7 @@ python3 -m feline realtime stop
 
 `--duration SECONDS` provides a bounded verification session. `--environment
 practice` is the default; selecting `live` changes only the read-only price
-host and does not create a live-order path. The GUI's **Start OANDA Paper**
+host and does not itself create an order path. The GUI's **Broker Manager**
 button starts the same off-GUI-thread runtime.
 
 ## Integrity and timing

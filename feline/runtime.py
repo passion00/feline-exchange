@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections import defaultdict,deque
-from dataclasses import dataclass,replace
+from dataclasses import asdict,dataclass,replace
 from datetime import datetime,timedelta,timezone
 from pathlib import Path
 
@@ -34,11 +34,11 @@ class PendingAIAssessment:
 
 
 class FelineRuntime:
-    def __init__(self, config: AppConfig, provider: MarketDataProvider | None = None, ai_client=None, recover: bool = True, replay_session_id: str | None = None, validation_mode: str | None = None, validation_output_root: Path | None = None) -> None:
+    def __init__(self, config: AppConfig, provider: MarketDataProvider | None = None, ai_client=None, recover: bool = True, replay_session_id: str | None = None, validation_mode: str | None = None, validation_output_root: Path | None = None, execution_broker=None, autonomous_trading_enabled:bool=True) -> None:
         self.config = config
         self.replay_session_id = replay_session_id
         self.bus = EventBus()
-        self.broker = PaperBroker(config=config.paper)
+        self.broker = execution_broker or PaperBroker(config=config.paper);self.external_broker=execution_broker is not None;self.autonomous_trading_enabled=autonomous_trading_enabled;self.broker_session=None
         self.risk = RiskEngine(config.risk)
         self.database = Database(Path(config.database_path))
         self.provider = provider or MockMarketDataProvider(config.tick_interval_seconds)
@@ -57,6 +57,7 @@ class FelineRuntime:
         self.equity_history: list[float] = []
         self.trade_pnls: list[float] = []
         self._persisted_fill_count=0
+        self._external_broker_shutdown=False
         self.exposure_samples = 0
         self.emergency_stop_path = Path("data/EMERGENCY_STOP")
         self.running = False
@@ -68,7 +69,7 @@ class FelineRuntime:
             from feline.research.realtime_validation import RealtimeValidationTracker
             self.validation_tracker=RealtimeValidationTracker(validation_mode)
         self.ai = AIWorker(config.ai, ai_client or LlamaCppClient(config.ai), self._handle_ai_result)
-        recovered = self.database.recover_broker_state() or self.database.latest_portfolio()
+        recovered = (self.database.recover_broker_state() or self.database.latest_portfolio()) if not self.external_broker else None
         if recovered and recover: self.broker.restore(*recovered)
         self.database.save_health("database","ok",{})
         self.database.save_health("event_bus","ok",{"pending":0})
@@ -156,6 +157,7 @@ class FelineRuntime:
             if signal and self.config.strategy.enabled:
                 if self.realtime_session_id:signal=replace(signal,realtime_session_id=self.realtime_session_id)
                 self.recent_signals.append(signal);await self.bus.publish(signal);submitted=self._submit_signal_assessment(signal) if self.config.ai.enabled and self.config.ai.decision_mode in {"confirm_or_veto","record"} else False
+                if not self.autonomous_trading_enabled:continue
                 if self.config.ai.decision_mode!="confirm_or_veto":await self._execute_signal(signal)
                 elif not submitted:
                     unavailable=AIAnalysisResult(job_id="queue-rejected:"+signal.id,instrument=signal.instrument,event_type="market_signal",direction="neutral",importance=0,confidence=0,time_horizon="none",summary="AI queue unavailable",reasoning_summary="Fail-safe NO_TRADE",evidence=(),available=False,error="QueueUnavailable",suggested_action="NO_TRADE",affected_signal_id=signal.id,downstream_decision="NO_TRADE:queue_unavailable",vetoed=True,realtime_session_id=self.realtime_session_id);self.latest_ai=unavailable;await self.bus.publish(unavailable)
@@ -172,6 +174,8 @@ class FelineRuntime:
         portfolio=self.broker.portfolio_state();quantity,stop,target=self.strategy.order_from_signal(signal,portfolio["equity"]);allocated=self.allocator.allocate(signal,portfolio["equity"],portfolio["cash"],portfolio["exposure"]);quantity=min(quantity,allocated);order=OrderRequest(instrument=signal.instrument,side=signal.side,quantity=quantity,expected_price=signal.price,stop_price=stop,take_profit_price=target,signal_id=signal.id,correlation_id=signal.id,timestamp=signal.timestamp,replay_session_id=self.replay_session_id);return await self.request_order(order)
 
     async def request_order(self, order: OrderRequest):
+        if not self.autonomous_trading_enabled:
+            decision=RiskEvent(approved=False,rule="autonomous_trading",message="Trading is stopped; connection alone cannot submit orders",severity="high",order_request_id=order.id,correlation_id=order.correlation_id);await self.bus.publish(decision);return decision
         if self.realtime_session_id and not self.feed_trading_ready:
             decision=RiskEvent(approved=False,rule="market_feed",message=f"Realtime feed is {self.feed_state}; stale/disconnected data cannot create orders",severity="high",order_request_id=order.id,correlation_id=order.correlation_id)
             await self.bus.publish(decision);return decision
@@ -190,8 +194,15 @@ class FelineRuntime:
             trade=self.trades.close(order.instrument,new_fills[-1].timestamp,new_fills[-1].fill_price,ExitReason.STRATEGY,sum(f.commission for f in new_fills),sum(f.spread_cost for f in new_fills),sum(f.slippage_amount for f in new_fills));self.database.save_trade(trade,"completed")
         if after != before:self.trade_pnls.append(after-before)
         self.database.commit_execution(self.broker,new_fills,[update])
+        drain=getattr(self.broker,"drain_audit_events",None)
+        if drain and self.broker_session:self.database.save_broker_events(self.broker_session["session_id"],drain())
         self._persisted_fill_count=len(self.broker.fills)
         return update
+
+    def arm_autonomous_trading(self)->None:
+        if self.risk.kill_switch:raise RuntimeError("kill switch is active")
+        self.autonomous_trading_enabled=True;self.database.save_health("autonomous_trading","armed",{"external_broker":self.external_broker})
+    def disarm_autonomous_trading(self)->None:self.autonomous_trading_enabled=False;self.database.save_health("autonomous_trading","stopped",{"external_broker":self.external_broker})
 
     def submit_news(self, event: NewsEvent) -> bool:
         normalized=self.news_pipeline.process(event)
@@ -213,9 +224,16 @@ class FelineRuntime:
         realtime_stop_path=Path("data/REALTIME_STOP")
         if self.realtime_session_id:realtime_stop_path.unlink(missing_ok=True)
         self.ai.start()
+        if self.external_broker:
+            from feline.brokers.core import BrokerConnectionState
+            if self.broker.state is not BrokerConnectionState.CONNECTED:await self.broker.connect()
+            self.broker.available_instruments=await self.broker.discover_instruments()
+            profile=self.broker.profile;started=datetime.now(timezone.utc).isoformat();self.broker_session={"session_id":self.realtime_session_id or __import__('uuid').uuid4().hex,"profile_id":profile.profile_id,"adapter":self.broker.adapter_name,"environment":profile.environment,"account_id":profile.account_id,"capabilities":asdict(self.broker.broker_capabilities),"started_at":started,"ended_at":None,"status":"connected","paper_only":profile.environment!="live"};self.database.save_broker_profile(profile);self.database.save_broker_session(self.broker_session)
+            reconciliation=await self.broker.reconcile()
+            if reconciliation.get("disagreement"):self.database.save_health("broker_reconciliation","disagreement",reconciliation)
         realtime_session=None
         if self.realtime_session_id:
-            now=__import__('datetime').datetime.now(__import__('datetime').timezone.utc).isoformat();realtime_session={"realtime_session_id":self.realtime_session_id,"provider":self.provider.source.capabilities.provider,"instruments":list(self.provider.config.instruments),"started_at":now,"ended_at":None,"status":"running","feline_version":__import__('feline').__version__,"mode":"realtime_paper","validation_mode":self.validation_mode,"paper_only":True};self._realtime_session_record=realtime_session;self.database.save_realtime_session(realtime_session,"running")
+            provider_name=getattr(getattr(self.provider.source,"capabilities",None),"provider",getattr(self.provider.source,"adapter_name",type(self.provider.source).__name__));profile=getattr(self.broker,"profile",None);paper_only=not self.external_broker or profile.environment!="live";mode="realtime_paper" if not self.external_broker else f"realtime_external_{profile.environment}";now=__import__('datetime').datetime.now(__import__('datetime').timezone.utc).isoformat();realtime_session={"realtime_session_id":self.realtime_session_id,"provider":provider_name,"instruments":list(self.provider.config.instruments),"started_at":now,"ended_at":None,"status":"running","feline_version":__import__('feline').__version__,"mode":mode,"validation_mode":self.validation_mode,"paper_only":paper_only};self._realtime_session_record=realtime_session;self.database.save_realtime_session(realtime_session,"running")
         async def loop():
             try:
                 async for tick in self.provider.stream():
@@ -251,13 +269,26 @@ class FelineRuntime:
             await self.bus.drain()
             for candle in self.candles.flush(): self.database.persist_event(candle)
             self.snapshot()
-            self.database.persist_broker_state(self.broker)
+            if not self.external_broker:self.database.persist_broker_state(self.broker)
             self.database.save_health("market_provider","disconnected",{})
             if realtime_session:
                 realtime_session.update({"ended_at":__import__('datetime').datetime.now(__import__('datetime').timezone.utc).isoformat(),"status":"completed","quotes":self.tick_count,"first_source_timestamp":self.first_market_timestamp.isoformat() if self.first_market_timestamp else None,"last_source_timestamp":self.last_market_timestamp.isoformat() if self.last_market_timestamp else None});self.database.save_realtime_session(realtime_session,"completed")
+            await self._shutdown_external_broker()
+
+    async def _shutdown_external_broker(self) -> None:
+        if not self.external_broker or self._external_broker_shutdown:return
+        self._external_broker_shutdown=True
+        try:
+            reconciliation=await self.broker.reconcile();self.database.save_health("broker_reconciliation","disagreement" if reconciliation.get("disagreement") else "ok",reconciliation)
+        except Exception as exc:self.database.save_health("broker_reconciliation","failed",{"error":type(exc).__name__})
+        try:await self.broker.disconnect()
+        except Exception as exc:self.database.save_health("external_broker","disconnect_failed",{"error":type(exc).__name__})
+        if self.broker_session:
+            self.broker_session.update({"ended_at":datetime.now(timezone.utc).isoformat(),"status":"disconnected"});self.database.save_broker_session(self.broker_session);drain=getattr(self.broker,"drain_audit_events",None);self.database.save_broker_events(self.broker_session["session_id"],drain() if drain else [])
 
     async def stop(self) -> None:
         self.running = False
+        self.disarm_autonomous_trading()
         stop=getattr(self.provider,"stop",None)
         if stop:await stop()
         await self.ai.stop()
@@ -266,7 +297,8 @@ class FelineRuntime:
         if self.ai.dropped:ai_status="pressure"
         self.database.save_health("ai",ai_status,{"queue_depth":self.ai.queue.qsize(),"dropped":self.ai.dropped})
         self.database.save_health("event_bus","ok",{"pending":len(self.bus._tasks)})
-        self.database.save_health("paper_broker","ok",{"positions":len(self.broker.positions)})
+        self.database.save_health("external_broker" if self.external_broker else "paper_broker","ok",{"positions":len(self.broker.positions)})
+        await self._shutdown_external_broker()
         if self.validation_tracker and self._realtime_session_record and self.validation_summary is None:
             from feline.research.realtime_validation import build_validation_summary,export_validation_summary
             self.validation_summary=build_validation_summary(self,self._realtime_session_record,self.validation_tracker);self.database.save_realtime_validation(self.validation_summary);self.validation_output_directory=export_validation_summary(self.validation_summary,self.validation_output_root)

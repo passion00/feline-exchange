@@ -1,6 +1,6 @@
 # Feline Exchange Engineering Invariants
 
-v0.15 data invariant: adapters preserve provider symbol, price basis,
+v0.16 data invariant: adapters preserve provider symbol, price basis,
 timestamps, checksums, and gaps. BTCUSDT is distinct from BTCUSD. Quality
 validation never clamps OHLC or synthesizes missing candles, and a REJECTED
 dataset cannot automatically enter signal research.
@@ -10,7 +10,7 @@ dataset cannot automatically enter signal research.
 1. `~/lynx` is read-only. Never create, modify, move, rename, reformat, or delete anything there.
 2. LLM inference never blocks market collection, deterministic risk, paper execution, or portfolio monitoring.
 3. The deterministic risk engine overrides every strategy, signal, and AI hypothesis. No bypass is permitted.
-4. Feline v0.15 has no live broker implementation or real-order path. Realtime ingestion can drive only the existing paper broker; paper/research mode remains mandatory.
+4. Feline v0.16 defaults to internal paper or external practice/demo execution. External live-money execution requires both a deliberately live-enabled profile and the exact `FELINE_ENABLE_LIVE_BROKER` acknowledgement; it can never be inherited from a practice profile.
 21. GUI projections are bounded and lossy by design; the core event/audit path is authoritative and never waits for rendering.
 16. A simulated execution commit is atomic across fills, order state, cash, positions, pending quantity, and protective state.
 17. Duplicate fill identifiers are idempotent and impossible state transitions are rejected.

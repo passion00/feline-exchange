@@ -32,7 +32,8 @@ class RealtimeIngestionProvider(MarketDataProvider):
     async def _health(self,state:FeedState,message:str=""):
         self.state=state
         if self.health_callback:
-            await self.health_callback(FeedHealthEvent(provider=self.source.capabilities.provider,state=state.value,realtime_session_id=self.session_id,
+            provider=getattr(getattr(self.source,"capabilities",None),"provider",getattr(self.source,"adapter_name",type(self.source).__name__))
+            await self.health_callback(FeedHealthEvent(provider=provider,state=state.value,realtime_session_id=self.session_id,
                 last_source_timestamp=self.last_source_timestamp,last_ingestion_timestamp=self.last_ingestion_timestamp,message=message))
 
     async def stream(self):

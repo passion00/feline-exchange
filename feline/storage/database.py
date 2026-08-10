@@ -66,7 +66,7 @@ class Database:
             self.connection.commit()
 
     def count(self, table: str) -> int:
-        allowed = {"market_events", "news_events", "ai_analyses", "signals", "paper_orders", "paper_trades", "trades", "positions", "portfolio_snapshots", "risk_events", "system_events", "candles", "regime_events","fills","financing_charges","pending_orders","experiments","walk_forward_windows","replay_sessions","realtime_sessions","realtime_quotes","realtime_validation_summaries","dataset_registry","research_experiments","research_episodes","event_results","aggregate_results","research_exclusions","research_post_shock_metrics"}
+        allowed = {"market_events", "news_events", "ai_analyses", "signals", "paper_orders", "paper_trades", "trades", "positions", "portfolio_snapshots", "risk_events", "system_events", "candles", "regime_events","fills","financing_charges","pending_orders","experiments","walk_forward_windows","replay_sessions","realtime_sessions","realtime_quotes","realtime_validation_summaries","broker_profiles","broker_sessions","broker_events","dataset_registry","research_experiments","research_episodes","event_results","aggregate_results","research_exclusions","research_post_shock_metrics"}
         if table not in allowed:
             raise ValueError("Invalid table")
         return int(self.connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0])
@@ -164,6 +164,16 @@ class Database:
         payload=json.dumps(__import__('dataclasses').asdict(trade),default=str,sort_keys=True)
         with self.lock:
             self.connection.execute("INSERT OR REPLACE INTO trades VALUES(?,?,?,?,?,?)",(trade.trade_id,trade.instrument,status,trade.entry_time.isoformat(),trade.exit_time.isoformat() if trade.exit_time else None,payload))
+            self.connection.commit()
+
+    def save_broker_profile(self,profile)->None:
+        public=profile.public_dict();now=__import__('datetime').datetime.now(__import__('datetime').timezone.utc).isoformat()
+        with self.lock:self.connection.execute("INSERT OR REPLACE INTO broker_profiles VALUES(?,?,?,?,?,?,?)",(profile.profile_id,profile.adapter,profile.environment,profile.account_id,profile.name,json.dumps(public,sort_keys=True),now));self.connection.commit()
+    def save_broker_session(self,session:dict)->None:
+        with self.lock:self.connection.execute("INSERT OR REPLACE INTO broker_sessions VALUES(?,?,?,?,?,?,?,?,?)",(session["session_id"],session.get("profile_id"),session["adapter"],session["environment"],session.get("account_id"),session["started_at"],session.get("ended_at"),session["status"],json.dumps(session,sort_keys=True,default=str)));self.connection.commit()
+    def save_broker_events(self,session_id:str,events)->None:
+        with self.lock:
+            for event in events:self.connection.execute("INSERT OR IGNORE INTO broker_events VALUES(?,?,?,?,?,?,?)",(event["event_id"],session_id,event["timestamp"],event["kind"],event.get("request_id"),event["status"],json.dumps(event.get("payload",{}),sort_keys=True,default=str)))
             self.connection.commit()
 
     def register_dataset(self,record)->None:

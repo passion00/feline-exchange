@@ -1,6 +1,6 @@
-# Feline Exchange v0.15.0 — Live Paper Validation & AI Evaluation
+# Feline Exchange v0.16.0 — Broker Abstraction & GUI Broker Manager
 
-Feline Exchange is a local-first observer, deterministic execution/replay simulator, and market research platform. Version 0.15 adds controlled realtime paper-validation sessions and objective AI evaluation exports around the v0.14 reasoning layer. The model may confirm or veto an existing deterministic signal, but it cannot originate orders or bypass feed health, RiskEngine, PaperBroker, stops, exposure, or the kill switch. See [Live Paper Validation](docs/LIVE_PAPER_VALIDATION.md), [AI Integration](docs/AI_INTEGRATION.md), and [Realtime paper ingestion](docs/REALTIME_INGESTION.md). No live-order path exists.
+Feline Exchange is a local-first observer, deterministic execution/replay simulator, and market research platform. Version 0.16 adds discoverable broker adapters and a GUI Broker Manager. OANDA practice can provide quotes, account state, and demo execution through the same strategy → AI → deterministic risk pipeline; connecting never arms trading. Internal PaperBroker remains the replay/offline default. See [Broker Adapters](docs/BROKER_ADAPTERS.md), [Live Paper Validation](docs/LIVE_PAPER_VALIDATION.md), and [AI Integration](docs/AI_INTEGRATION.md).
 
 AI configuration is provider-neutral at the trading layer. The included practical backend speaks the OpenAI-compatible chat-completions protocol (including local `llama.cpp`); invalid, stale, low-confidence, unavailable, or contradictory assessments fail closed without blocking market ingestion.
 
@@ -34,7 +34,7 @@ Execution persistence uses one SQLite `BEGIN IMMEDIATE` boundary for order state
 ```text
 Provider or CSV replay -> ticks -> multi-timeframe candles
                               -> Level 2 indicators/regime/reference signal
-                              -> Level 1 danger/risk gate -> PaperBroker -> SQLite audit
+                              -> Level 1 danger/risk gate -> selected broker adapter -> SQLite audit
 News -> normalize/deduplicate/tag/score -> bounded priority AI queue -> validated result
 ```
 

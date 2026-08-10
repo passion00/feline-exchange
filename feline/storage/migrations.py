@@ -63,4 +63,10 @@ MIGRATIONS: tuple[str, ...] = (
     );
     CREATE INDEX IF NOT EXISTS idx_validation_realtime_session ON realtime_validation_summaries(realtime_session_id);
     """,
+    """
+    CREATE TABLE IF NOT EXISTS broker_profiles (profile_id TEXT PRIMARY KEY,adapter TEXT NOT NULL,environment TEXT NOT NULL,account_id TEXT,name TEXT NOT NULL,payload TEXT NOT NULL,updated_at TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS broker_sessions (session_id TEXT PRIMARY KEY,profile_id TEXT,adapter TEXT NOT NULL,environment TEXT NOT NULL,account_id TEXT,started_at TEXT NOT NULL,ended_at TEXT,status TEXT NOT NULL,payload TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS broker_events (event_id TEXT PRIMARY KEY,session_id TEXT NOT NULL,timestamp TEXT NOT NULL,kind TEXT NOT NULL,request_id TEXT,status TEXT NOT NULL,payload TEXT NOT NULL);
+    CREATE INDEX IF NOT EXISTS idx_broker_events_session_time ON broker_events(session_id,timestamp);
+    """,
 )

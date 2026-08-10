@@ -27,12 +27,12 @@ class OandaV20Provider(HistoricalDataProvider,RealtimeDataProvider):
         self.client=client or RetryingHTTPClient();self.guard=RealtimeIntegrityGuard()
 
     def _request(self,url:str)->urllib.request.Request:
-        return urllib.request.Request(url,headers={"Authorization":f"Bearer {self.token}","Accept-Datetime-Format":"RFC3339","User-Agent":"FelineExchange/0.12 read-only data"})
+        return urllib.request.Request(url,headers={"Authorization":f"Bearer {self.token}","Accept-Datetime-Format":"RFC3339","User-Agent":"FelineExchange/0.16 broker adapter"})
 
     @staticmethod
     def provider_symbol(instrument:str)->str:
         key=instrument.replace("/","").upper()
-        if key not in {"EURUSD","XAUUSD"}:raise ValueError(f"OANDA FX adapter does not support {instrument}")
+        if len(key)!=6 or not key.isalnum():raise ValueError(f"invalid OANDA instrument {instrument}")
         return key[:3]+"_"+key[3:]
 
     def acquire(self,request:HistoricalRequest,output:Path):

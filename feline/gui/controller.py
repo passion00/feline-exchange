@@ -81,7 +81,8 @@ class ControlledReplayProvider(CSVReplayProvider):
 class WorkstationController:
  """Real runtime bridge. Qt polls bounded projections; core never waits for UI."""
  def __init__(self,config:AppConfig|None=None,limit=2000):
-  self.config=config or AppConfig();self.replay=ReplayController();self.worker=RuntimeThread();self.research_executor=ThreadPoolExecutor(max_workers=1,thread_name_prefix="feline-research");self.messages=Queue(maxsize=limit);self.runtime=None;self.future=None;self.research_future=None;self.research_cancel=threading.Event();self.selected_instrument=None;self.dropped=0;self.macro=None;self.phase=None;self.shock=ShockState.CALM;self.strategy={"state":"WAITING_FOR_EVENT","reason":""};self.continuous=None;self.continuous_events=[];self.continuous_features=ContinuousFeatureEngine();self.continuous_regimes=ContinuousRegimeEngine();self.continuous_router=StrategyRouter();self.horizons={};self.abstentions={"evaluated":0,"trades":0,"no_trade":0};self._macro_samples=[];self.session=None;self.records={};self.completed_snapshot=None;self.feed={"state":"OFF","provider":None,"last_source_timestamp":None,"last_ingestion_timestamp":None};self.mode="replay"
+  from feline.brokers import BrokerProfileStore,BrokerRegistry
+  self.config=config or AppConfig();self.broker_profiles=BrokerProfileStore();self.broker_registry=BrokerRegistry.builtins();self.selected_broker_profile=None;self._ephemeral_credential=None;self.replay=ReplayController();self.worker=RuntimeThread();self.research_executor=ThreadPoolExecutor(max_workers=1,thread_name_prefix="feline-research");self.messages=Queue(maxsize=limit);self.runtime=None;self.future=None;self.research_future=None;self.research_cancel=threading.Event();self.selected_instrument=None;self.dropped=0;self.macro=None;self.phase=None;self.shock=ShockState.CALM;self.strategy={"state":"WAITING_FOR_EVENT","reason":""};self.continuous=None;self.continuous_events=[];self.continuous_features=ContinuousFeatureEngine();self.continuous_regimes=ContinuousRegimeEngine();self.continuous_router=StrategyRouter();self.horizons={};self.abstentions={"evaluated":0,"trades":0,"no_trade":0};self._macro_samples=[];self.session=None;self.records={};self.completed_snapshot=None;self.feed={"state":"OFF","provider":None,"last_source_timestamp":None,"last_ingestion_timestamp":None};self.mode="replay"
  def _emit(self,item):
   if self.session:item.setdefault("replay_session_id",self.session["replay_session_id"])
   item.setdefault("ingestion_timestamp",datetime.now(timezone.utc).isoformat())
@@ -128,21 +129,50 @@ class WorkstationController:
     if kind=="jsonl":self.runtime.snapshot();self.runtime.database.persist_broker_state(self.runtime.broker)
     self.replay.stop();self.completed_snapshot=self.snapshot();status="failed" if failure else "completed";self.runtime.database.save_replay_session({**self.session,"result":build_replay_report(self.session,self.completed_snapshot,self.records)},status);self._emit({"kind":"state","state":status})
   self.future=self.worker.submit(run());self._emit({"kind":"state","state":"running","dataset":dataset})
- def start_realtime(self,instruments=("EURUSD",),environment="practice"):
+ def available_broker_adapters(self):return self.broker_registry.names()
+ def list_broker_profiles(self):return self.broker_profiles.load()
+ def save_broker_profile(self,profile):self.broker_profiles.save(profile);return profile
+ def remove_broker_profile(self,profile_id):
+  if self.selected_broker_profile==profile_id:raise RuntimeError("disconnect selected broker before removing profile")
+  self.broker_profiles.remove(profile_id)
+ def _clear_ephemeral_credential(self):
+  if not self._ephemeral_credential:return
+  import os
+  key,value=self._ephemeral_credential
+  if os.environ.get(key)==value:os.environ.pop(key,None)
+  self._ephemeral_credential=None
+ def connect_broker(self,profile_id,credential=None):
   self.stop()
   if self.future:
    try:self.future.result(timeout=3)
    except Exception:pass
   if self.runtime:self.runtime.database.close();self.runtime=None
-  from feline.market.oanda import OandaV20Provider
+  import os
   from feline.market.realtime import RealtimeIngestionProvider,RealtimeSessionConfig
   from dataclasses import replace as dc_replace
-  source=OandaV20Provider(environment=environment);provider=RealtimeIngestionProvider(source,RealtimeSessionConfig(instruments=tuple(instruments)))
-  self.mode="realtime";self.session=None;self.records={"signals":[],"risk":[],"candles":[],"diagnostics":[]};self.feed={"state":"CONNECTING","provider":"oanda_v20","last_source_timestamp":None,"last_ingestion_timestamp":None};self.replay.start();self.worker.start();ai_mode="confirm_or_veto" if self.config.ai.enabled else "advisory";self.runtime=FelineRuntime(dc_replace(self.config,ai=dc_replace(self.config.ai,decision_mode=ai_mode)),provider=provider,recover=True);self.runtime.bus.subscribe(Event,self._event)
+  profile=self.broker_profiles.get(profile_id)
+  if credential:os.environ[profile.credential_env]=credential;self._ephemeral_credential=(profile.credential_env,credential)
+  try:source=self.broker_registry.create(profile);provider=RealtimeIngestionProvider(source,RealtimeSessionConfig(instruments=(profile.default_instrument,)))
+  except Exception:self._clear_ephemeral_credential();raise
+  self.selected_broker_profile=profile_id;self.mode="realtime";self.session=None;self.records={"signals":[],"risk":[],"candles":[],"diagnostics":[]};self.feed={"state":"CONNECTING","provider":source.adapter_name,"last_source_timestamp":None,"last_ingestion_timestamp":None};self.replay.start();self.worker.start();ai_mode="confirm_or_veto" if self.config.ai.enabled else "advisory";self.runtime=FelineRuntime(dc_replace(self.config,ai=dc_replace(self.config.ai,decision_mode=ai_mode)),provider=provider,recover=False,execution_broker=source,autonomous_trading_enabled=False);self.runtime.bus.subscribe(Event,self._event)
   async def run():
+   failure=None
    try:await self.runtime.run()
-   finally:self.replay.stop();self.completed_snapshot=self.snapshot();self._emit({"kind":"state","state":"stopped"})
+   except Exception as exc:
+    failure=exc;self._emit({"kind":"diagnostic","severity":"error","summary":f"Broker connection/runtime failed: {type(exc).__name__}: {exc}"})
+   finally:
+    self._clear_ephemeral_credential()
+    self.replay.stop();self.completed_snapshot=self.snapshot();self._emit({"kind":"state","state":"failed" if failure else "stopped"})
   self.future=self.worker.submit(run());self._emit({"kind":"state","state":"running","mode":"realtime","session_id":provider.session_id});return provider.session_id
+ def start_realtime(self,instruments=("EURUSD",),environment="practice"):
+  from feline.brokers import BrokerProfile
+  profile=BrokerProfile(name="OANDA temporary",adapter="oanda_v20",environment=environment,account_id=__import__('os').environ.get("FELINE_OANDA_ACCOUNT_ID",""),default_instrument=instruments[0]);self.broker_profiles.save(profile);return self.connect_broker(profile.profile_id)
+ def start_autonomous_trading(self):
+  if not self.runtime or self.mode!="realtime":raise RuntimeError("connect a broker first")
+  self.runtime.arm_autonomous_trading();self._emit({"kind":"state","state":"armed"})
+ def stop_autonomous_trading(self):
+  if self.runtime:self.runtime.disarm_autonomous_trading();self._emit({"kind":"state","state":"stopped_trading"})
+ def disconnect_broker(self):self.stop();self.selected_broker_profile=None
  async def _run_mixed(self,path,speed):
   from datetime import timedelta
   events=read_mixed_events(path);self.continuous_events=[event for event in events if isinstance(event,NormalizedEconomicEvent)];previous_time=None;previous_price=None;detector=ShockDetector();strategy=MacroEventStrategy();native_aggregator=NativeCandleAggregator()
@@ -195,7 +225,7 @@ class WorkstationController:
   Path("data/EMERGENCY_STOP").parent.mkdir(parents=True,exist_ok=True);Path("data/EMERGENCY_STOP").write_text("Qt emergency stop\n");self._emit({"kind":"state","state":"kill_switch"})
  def snapshot(self):
   if not self.runtime:return None
-  session_id=self.session["replay_session_id"] if self.session else self.runtime.realtime_session_id;p=self.runtime.broker.portfolio_state();latest=self.runtime.latest_ai.payload() if self.runtime.latest_ai else None;validation=self.runtime.validation_tracker.ai_metrics(self.runtime.ai.dropped) if self.runtime.validation_tracker else None;return {"portfolio":p,"risk":{"trading_enabled":self.runtime.risk.trading_enabled,"kill_switch":self.runtime.risk.kill_switch,"danger":self.runtime.risk.danger.active(),"daily_pnl":self.runtime.risk.state.daily_pnl,"max_exposure":self.runtime.config.risk.max_total_exposure},"prices":{k:{"bid":v.bid,"ask":v.ask,"mid":v.mid,"spread":v.spread_ratio,"regime":self.runtime.regimes.current.get(k).value if k in self.runtime.regimes.current else "unknown"} for k,v in self.runtime.broker.quotes.items()},"ai":{"queue":self.runtime.ai.queue.qsize(),"available":self.runtime.ai.last_available,"provider":self.runtime.config.ai.provider,"model":self.runtime.config.ai.model,"decision_mode":self.runtime.config.ai.decision_mode,"validation_mode":self.runtime.validation_mode or "not_recording","validation_metrics":validation,"status":"disabled" if not self.runtime.config.ai.enabled else "available" if self.runtime.ai.last_available else "unavailable" if self.runtime.ai.last_available is False else "waiting","latest":latest},"positions":[vars(x) for x in self.runtime.broker.positions.values()],"orders":[{**x.payload(),"replay_session_id":session_id} for x in self.runtime.broker.orders.values()],"fills":[{**x.payload(),"replay_session_id":session_id} for x in self.runtime.broker.fills[-100:]],"trades":[{**vars(x),"replay_session_id":session_id} for x in self.runtime.trades.completed],"macro":vars(self.macro) if self.macro else None,"phase":self.phase,"shock":self.shock.value,"strategy":self.strategy,"continuous":self.continuous,"horizons":self.horizons,"abstentions":self.abstentions,"replay_session_id":session_id,"realtime_session_id":self.runtime.realtime_session_id,"feed":self.feed,"mode":self.mode,"dropped":self.dropped}
+  session_id=self.session["replay_session_id"] if self.session else self.runtime.realtime_session_id;p=self.runtime.broker.portfolio_state();latest=self.runtime.latest_ai.payload() if self.runtime.latest_ai else None;validation=self.runtime.validation_tracker.ai_metrics(self.runtime.ai.dropped) if self.runtime.validation_tracker else None;profile=getattr(self.runtime.broker,"profile",None);return {"portfolio":p,"broker":{"adapter":getattr(self.runtime.broker,"adapter_name","internal_paper"),"profile":profile.name if profile else "Internal PaperBroker","environment":profile.environment if profile else "paper","account_id":profile.account_id if profile else None,"connection_state":getattr(getattr(self.runtime.broker,"state",None),"value","INTERNAL"),"autonomous_trading":self.runtime.autonomous_trading_enabled,"instruments":list(getattr(self.runtime.broker,"available_instruments",self.runtime.broker.quotes.keys()))},"risk":{"trading_enabled":self.runtime.risk.trading_enabled,"kill_switch":self.runtime.risk.kill_switch,"danger":self.runtime.risk.danger.active(),"daily_pnl":self.runtime.risk.state.daily_pnl,"max_exposure":self.runtime.config.risk.max_total_exposure},"prices":{k:{"bid":v.bid,"ask":v.ask,"mid":v.mid,"spread":v.spread_ratio,"regime":self.runtime.regimes.current.get(k).value if k in self.runtime.regimes.current else "unknown"} for k,v in self.runtime.broker.quotes.items()},"ai":{"queue":self.runtime.ai.queue.qsize(),"available":self.runtime.ai.last_available,"provider":self.runtime.config.ai.provider,"model":self.runtime.config.ai.model,"decision_mode":self.runtime.config.ai.decision_mode,"validation_mode":self.runtime.validation_mode or "not_recording","validation_metrics":validation,"status":"disabled" if not self.runtime.config.ai.enabled else "available" if self.runtime.ai.last_available else "unavailable" if self.runtime.ai.last_available is False else "waiting","latest":latest},"positions":[vars(x) for x in self.runtime.broker.positions.values()],"orders":[{**x.payload(),"replay_session_id":session_id} for x in self.runtime.broker.orders.values()],"fills":[{**x.payload(),"replay_session_id":session_id} for x in self.runtime.broker.fills[-100:]],"trades":[{**vars(x),"replay_session_id":session_id} for x in self.runtime.trades.completed],"macro":vars(self.macro) if self.macro else None,"phase":self.phase,"shock":self.shock.value,"strategy":self.strategy,"continuous":self.continuous,"horizons":self.horizons,"abstentions":self.abstentions,"replay_session_id":session_id,"realtime_session_id":self.runtime.realtime_session_id,"feed":self.feed,"mode":self.mode,"dropped":self.dropped}
  def build_report(self):
   if not self.session or not self.completed_snapshot:raise RuntimeError("no completed replay result")
   return build_replay_report(self.session,self.completed_snapshot,self.records)

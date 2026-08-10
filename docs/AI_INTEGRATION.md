@@ -30,7 +30,7 @@ The workstation AI Opinion panel shows provider/model health, action, confidence
 
 ## Safety limitations
 
-- Paper/research execution only; there is no live-order adapter.
+- AI never submits orders. v0.16 may route an approved deterministic order to internal paper, external practice/demo, or an explicitly double-gated live adapter; RiskEngine remains authoritative in every case.
 - AI cannot alter risk thresholds, stops, sizing, exposure limits, feed gates, or the kill switch.
 - A model timeout cannot block quote/candle ingestion or GUI updates.
 - The supplied OpenAI-compatible default is a configurable research backend, not a reliability or profitability guarantee.
