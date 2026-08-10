@@ -38,6 +38,10 @@ Risk sizing defaults to hypothetical equity USD 100,000 and risk fraction 0.0025
 
 `equity_curve.csv` is realized-trade equity. Drawdown is current realized equity minus its running peak; percent drawdown divides by that peak. It is not mark-to-market drawdown. Summaries retain currency P/L and add total/average/median R, reference-edge-to-cost ratio, break-even average friction, and frozen-trade cost sensitivity. These are descriptive development metrics, not strategy optimization or profitability claims.
 
+## v0.11.3 signal locking
+
+The stateful runner intentionally suppresses ordinary candidates while a position is open. Execution friction changes protective-stop timing, realized equity, later sizing and when that suppression clears; therefore different execution profiles can legitimately produce different later portfolios. `research signals run` evaluates the unchanged router with no portfolio position state, records every eligible ex-ante opportunity, resolves a canonical reference trade, then applies friction read-only. This separates predictive-signal measurement from realistic account path dependence without replacing either.
+
 Feline v0.11 evaluates every completed one-minute candle and is not centered only on macro announcements. It does not always trade: warmup, uncertain conditions, absent setups, existing instrument positions, and protected event windows all produce explicit `NO_TRADE` decisions.
 
 ```bash

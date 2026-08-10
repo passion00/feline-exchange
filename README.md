@@ -1,6 +1,6 @@
-# Feline Exchange v0.11.2 — Multi-Market Research & Risk Normalization
+# Feline Exchange v0.11.3 — Signal-Locked Strategy Research
 
-Feline Exchange is a local-first observer, deterministic execution/replay simulator, and market research platform. Version 0.11.2 adds explicit EURUSD, XAUUSD, and BTCUSD market/execution profiles, standardized risk sizing, R-multiple/equity/drawdown analytics, and read-only cross-market comparison. Strategies, regimes, macro research, and the corrected v0.11.1 accounting contract remain frozen. It remains paper/research only.
+Feline Exchange is a local-first observer, deterministic execution/replay simulator, and market research platform. Version 0.11.3 adds immutable signal-opportunity ledgers and cost overlays so predictive signal quality can be measured separately from path-dependent portfolio execution. Strategies, regimes, macro research, v0.11.1 accounting, and v0.11.2 market profiles remain frozen. It remains paper/research only.
 
 Continuous multi-market examples:
 
@@ -11,6 +11,15 @@ python3 -m feline research continuous compare REPORT_EURUSD REPORT_XAUUSD REPORT
 ```
 
 `reference_zero_cost` is a frictionless descriptive control, never a realistic execution claim. All research-default execution profiles are explicitly uncalibrated.
+
+Signal-locked research:
+
+```bash
+python3 -m feline research signals run data/historical/processed/eurusd_4weeks.jsonl --instrument EURUSD --strategy all --starting-equity 100000 --risk-fraction 0.0025 --execution-profile research_default --cost-multipliers 0,0.25,0.5,0.75,1,1.5,2 --seed 17
+python3 -m feline research signals compare STUDY_EURUSD STUDY_XAUUSD STUDY_BTCUSD --comparison-basis native
+```
+
+This is predictive-signal research, not a portfolio backtest. See `docs/SIGNAL_LOCKED_RESEARCH.md`.
 
 v0.8 studies EUR/USD after Fed/ECB-style shocks, deliberately avoiding the initial announcement race. The Qt workstation opens CSV tick data and globally ordered mixed JSONL price/macro fixtures through one replay control. It models deterministic pre-event, announcement, shock, stabilization, post-event, and complete phases; research decisions classify continuation, mean reversion, or explicit NO_TRADE.
 

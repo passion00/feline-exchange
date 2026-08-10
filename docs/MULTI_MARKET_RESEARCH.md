@@ -14,3 +14,5 @@ python3 -m feline research continuous compare REPORT_A REPORT_B REPORT_C --compa
 Native mode uses each experiment's full market time. Common mode reports the completed timestamps shared by every input as descriptive overlap metadata; it does not retroactively change signals or trades. Reports include every strategy family, including zero-trade and losing families.
 
 Provider files remain local/ignored. Local Twelve Data conversion accepts normalized `EURUSD`, `XAUUSD`, and `BTCUSD` instrument names and never needs an API key. Provider price OHLC is not bid/ask data; execution spread remains synthetic.
+
+For fair signal comparisons, prefer the v0.11.3 `research signals run` ledger. Its cost multipliers evaluate identical canonical opportunities; the existing `research continuous run` remains the authoritative stateful paper portfolio simulation.
