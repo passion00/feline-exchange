@@ -24,6 +24,7 @@ from pathlib import Path
 from typing import Iterable
 
 from feline.market.profiles import get_market_profile
+from feline.market.datafeed import HistoricalDataProvider, HistoricalRequest, ProviderCapabilities
 
 UTC = timezone.utc
 NATIVE_DATA_VERSION = "1.0"
@@ -252,3 +253,20 @@ def _write_native(rows: list[dict], output: Path, provenance: dict, reused: int,
     provenance_path = output.with_suffix(output.suffix + ".provenance.json")
     provenance_path.write_text(json.dumps(provenance, indent=2, sort_keys=True) + "\n")
     return NativeDatasetResult(str(output), str(provenance_path), len(rows), _sha(output), len(provenance["source_files"]), reused, downloaded)
+
+
+class DukascopyHistoricalProvider(HistoricalDataProvider):
+    capabilities=ProviderCapabilities("dukascopy",True,False,True,False,("EURUSD","XAUUSD"))
+    def __init__(self,raw_root:Path=Path("data/historical/raw/dukascopy")):self.raw_root=raw_root
+    def acquire(self,request:HistoricalRequest,output:Path):
+        if request.price_basis.lower()!="bid":raise ValueError("Dukascopy normalized historical provider uses native BID ticks")
+        return download_dukascopy(request.instrument,request.start,request.end_exclusive,output,self.raw_root)
+
+
+class BinanceSpotHistoricalProvider(HistoricalDataProvider):
+    capabilities=ProviderCapabilities("binance_spot",True,False,True,False,("BTCUSDT",))
+    def __init__(self,raw_root:Path=Path("data/historical/raw/binance")):self.raw_root=raw_root
+    def acquire(self,request:HistoricalRequest,output:Path):
+        if request.instrument.replace("/","").upper()!="BTCUSDT":raise ValueError("Binance Spot archive provider supports BTCUSDT")
+        if request.price_basis.lower() not in {"spot","trades"}:raise ValueError("Binance Spot archive price basis must be spot")
+        return download_binance(request.start,request.end_exclusive,output,self.raw_root)

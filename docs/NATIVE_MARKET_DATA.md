@@ -1,6 +1,6 @@
 # Native market data
 
-Feline v0.11.4 uses primary provider-hosted data for new replication work:
+Feline v0.12 uses primary provider-hosted data for new replication work:
 Dukascopy BI5 ticks for EURUSD/XAUUSD and Binance Spot public daily kline
 archives for BTCUSDT. Twelve Data import remains available for reproducibility,
 but the failed April–September 2024 multi-market attempt is not an accepted

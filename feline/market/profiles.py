@@ -66,7 +66,7 @@ MARKET_PROFILES: dict[str, MarketProfile] = {
     "XAUUSD": MarketProfile("XAUUSD", "spot_metal", "USD", "METAL_WEEKDAY_RESEARCH", "closed_weekend", 1.0, 1.0, 2, 3, 0.001, 100.0, 100_000.0, 0.01, None, "FX_UTC"),
     "BTCUSD": MarketProfile("BTCUSD", "crypto", "USD", "CRYPTO_24_7", "continuous", 1.0, 1.0, 2, 6, 0.000001, 2.0, 100_000.0, 0.01, None, "UTC_LIQUIDITY_SEGMENTS"),
     "BTCUSDT": MarketProfile("BTCUSDT", "crypto_spot", "USDT", "CRYPTO_24_7", "continuous", 1.0, 1.0, 2, 6, 0.000001, 2.0, 100_000.0, 0.01, None, "UTC_LIQUIDITY_SEGMENTS"),
-    # Retained compatibility profiles alongside the native v0.11.4 set.
+    # Retained compatibility profiles alongside the v0.12 production feed set.
     "GBPUSD": MarketProfile("GBPUSD", "fx", "USD", "FX_24_5", "closed_weekend", 1.0, 1.0, 5, 2, 0.01, 100_000.0, 100_000.0, 0.00001, 0.0001, "FX_UTC"),
     "BIST_DEMO": MarketProfile("BIST_DEMO", "equity", "TRY", "EXCHANGE", "closed_weekend", 1.0, 1.0, 2, 0, 1.0, 100_000.0, 100_000.0, 0.01, None, "EXCHANGE_LOCAL"),
     "US_DEMO": MarketProfile("US_DEMO", "equity", "USD", "EXCHANGE", "closed_weekend", 1.0, 1.0, 2, 0, 1.0, 100_000.0, 100_000.0, 0.01, None, "EXCHANGE_LOCAL"),

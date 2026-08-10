@@ -1,5 +1,15 @@
 # Read-only data provider research
 
+## v0.12 production selection
+
+OANDA v20 is the primary authenticated FX integration because its official API
+provides unsmoothed completed M1 candles and a heartbeat-backed bid/ask pricing
+stream under one symbol/timestamp model. Credentials remain exclusively in
+`FELINE_OANDA_API_TOKEN` and `FELINE_OANDA_ACCOUNT_ID`. Dukascopy BID ticks are
+the credential-free historical audit/fallback; Binance daily archives remain
+the BTCUSDT source. Twelve Data is legacy-only after systematic malformed
+EURUSD OHLC was observed in the replication corpus.
+
 Checked against official documentation on 2026-08-09. Plans, limits, entitlements, and licenses change; the operator must review current terms before enabling continuous collection or redistributing any data. Feline never bypasses authentication or exchange licensing.
 
 | Provider | Coverage/freshness | Authentication and documented limits | Cost/use considerations | Feline suitability |

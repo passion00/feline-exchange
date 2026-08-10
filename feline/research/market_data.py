@@ -128,6 +128,21 @@ def assert_dataset_research_eligible(path: Path) -> None:
             raise ValueError(f"dataset is REJECTED and cannot enter signal research: {path}")
 
 
+def audit_dataset_provenance(path:Path)->dict[str,Any]:
+    """Read-only checksum audit of processed data and its provider provenance."""
+    provenance_path=path.with_suffix(path.suffix+".provenance.json");quality_path=path.with_suffix(path.suffix+".quality.json")
+    issues=[];actual=file_checksum(path)
+    provenance=json.loads(provenance_path.read_text()) if provenance_path.exists() else None
+    if provenance is None:issues.append("missing_provenance")
+    elif provenance.get("processed_sha256")!=actual:issues.append("processed_checksum_mismatch")
+    quality=json.loads(quality_path.read_text()) if quality_path.exists() else None
+    if quality is None:issues.append("missing_quality_report")
+    elif quality.get("sha256")!=actual:issues.append("quality_checksum_mismatch")
+    if quality and quality.get("quality_status")==DatasetQualityStatus.REJECTED.value:issues.append("dataset_rejected")
+    return {"path":str(path.resolve()),"sha256":actual,"provider":provenance.get("provider") if provenance else None,
+            "quality_status":quality.get("quality_status") if quality else None,"issues":issues,"ok":not issues}
+
+
 def _gap_is_expected(before: datetime, after: datetime, profile: MarketProfile) -> bool:
     cursor = before + timedelta(minutes=1)
     if cursor >= after: return False

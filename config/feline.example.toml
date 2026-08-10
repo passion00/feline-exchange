@@ -4,6 +4,16 @@ log_directory = "logs"
 tick_interval_seconds = 0.25
 snapshot_interval_ticks = 20
 
+[providers.oanda]
+enabled = false
+token_env = "FELINE_OANDA_API_TOKEN"
+account_id_env = "FELINE_OANDA_ACCOUNT_ID"
+environment = "practice"
+historical_price_basis = "mid"
+timeout_seconds = 30.0
+max_retries = 4
+stale_after_seconds = 10.0
+
 [providers.alpha_vantage]
 enabled = false
 credential_env = "FELINE_ALPHA_VANTAGE_API_KEY"

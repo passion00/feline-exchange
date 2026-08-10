@@ -31,9 +31,10 @@ def parser() -> argparse.ArgumentParser:
     subs.add_parser("doctor")
     subs.add_parser("gui")
     data=subs.add_parser("data",help="provider-native historical research data")
-    data.add_argument("action",choices=["download","quality"]);data.add_argument("dataset",type=Path,nargs="?")
-    data.add_argument("--provider",choices=["dukascopy","binance"]);data.add_argument("--instrument",required=True)
+    data.add_argument("action",choices=["download","quality","audit"]);data.add_argument("dataset",type=Path,nargs="?")
+    data.add_argument("--provider",choices=["oanda","dukascopy","binance"]);data.add_argument("--instrument",required=True)
     data.add_argument("--start");data.add_argument("--end");data.add_argument("--output",type=Path);data.add_argument("--raw-root",type=Path)
+    data.add_argument("--price-basis",choices=["mid","bid","ask"]);data.add_argument("--environment",choices=["practice","live"],default="practice")
     importer=subs.add_parser("import-twelvedata",help="convert a local Twelve Data time_series JSON file to native OHLC JSONL")
     importer.add_argument("input",type=Path);importer.add_argument("output",type=Path);importer.add_argument("--instrument",required=True);importer.add_argument("--interval",default="1min",choices=["1min","5min","15min","1h"]);importer.add_argument("--timezone",default="UTC")
     macro_merge=subs.add_parser("add-macro-event",help="merge a scheduled economic event into replay JSONL")
@@ -67,13 +68,20 @@ def main() -> None:
         from datetime import datetime
         if args.action=="download":
             if not all((args.provider,args.start,args.end,args.output)):raise SystemExit("data download requires --provider --instrument --start --end --output")
-            from feline.replay.native_data import download_binance,download_dukascopy
-            if args.provider=="dukascopy":result=download_dukascopy(args.instrument,args.start,args.end,args.output,args.raw_root or Path("data/historical/raw/dukascopy"))
-            else:
-                if args.instrument.replace("/","").upper()!="BTCUSDT":raise SystemExit("Binance native archive command supports BTCUSDT")
-                result=download_binance(args.start,args.end,args.output,args.raw_root or Path("data/historical/raw/binance"))
+            from datetime import datetime
+            from feline.market.datafeed import DataFeedRegistry,HistoricalRequest
+            from feline.market.oanda import OandaV20Provider
+            from feline.replay.native_data import BinanceSpotHistoricalProvider,DukascopyHistoricalProvider
+            registry=DataFeedRegistry();registry.register("dukascopy",DukascopyHistoricalProvider(args.raw_root or Path("data/historical/raw/dukascopy")));registry.register("binance",BinanceSpotHistoricalProvider(args.raw_root or Path("data/historical/raw/binance")))
+            if args.provider=="oanda":registry.register("oanda",OandaV20Provider(environment=args.environment))
+            parse=lambda value:datetime.fromisoformat(value.replace("Z","+00:00"))
+            default_basis="bid" if args.provider=="dukascopy" else "spot" if args.provider=="binance" else "mid"
+            result=registry.historical(args.provider).acquire(HistoricalRequest(args.instrument,parse(args.start),parse(args.end),price_basis=args.price_basis or default_basis),args.output)
             print(json.dumps(result.__dict__,indent=2));return
-        if not args.dataset:raise SystemExit("data quality requires DATASET")
+        if not args.dataset:raise SystemExit("data quality/audit requires DATASET")
+        if args.action=="audit":
+            from feline.research.market_data import audit_dataset_provenance
+            result=audit_dataset_provenance(args.dataset);print(json.dumps(result,indent=2));raise SystemExit(0 if result["ok"] else 2)
         from feline.research.market_data import inspect_continuous_dataset
         parse=lambda value:datetime.fromisoformat(value.replace("Z","+00:00")) if value else None
         report=args.output or args.dataset.with_suffix(args.dataset.suffix+".quality.json")
@@ -182,7 +190,7 @@ def main() -> None:
         finally:
             await runtime.stop()
             runtime.database.close()
-    print("Feline Exchange v0.11.4 starting in PAPER/RESEARCH mode (no live broker exists).")
+    print("Feline Exchange v0.12.0 starting in PAPER/RESEARCH mode (no live broker exists).")
     asyncio.run(execute())
 
 

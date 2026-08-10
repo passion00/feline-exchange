@@ -1,6 +1,6 @@
-# Feline Exchange v0.11.4 — Native Research Data & Replication
+# Feline Exchange v0.12.0 — Reliable Production Data Feed
 
-Feline Exchange is a local-first observer, deterministic execution/replay simulator, and market research platform. Version 0.11.4 adds provider-native Dukascopy and checksum-verified Binance Spot ingestion, strict non-repairing quality gates, and a frozen replication protocol. [Native data](docs/NATIVE_MARKET_DATA.md) and [replication protocol](docs/REPLICATION_PROTOCOL.md) document the workflow. Strategies and regimes remain frozen. It remains paper/research only.
+Feline Exchange is a local-first observer, deterministic execution/replay simulator, and market research platform. Version 0.12 introduces an interchangeable historical/realtime feed contract, selects OANDA v20 as the primary authenticated FX feed, retains Dukascopy as the provider-native historical audit source, and retains checksum-verified Binance Spot archives for crypto. Strict non-repairing validation, immutable caching, and provenance protect research. See [Reliable data feeds](docs/RELIABLE_DATA_FEED.md). It remains paper/research only; no live-order path exists.
 
 Continuous multi-market examples:
 
