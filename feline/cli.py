@@ -145,7 +145,7 @@ def main() -> None:
         finally:
             await runtime.stop()
             runtime.database.close()
-    print("Feline Exchange v0.11.0 starting in PAPER/RESEARCH mode (no live broker exists).")
+    print("Feline Exchange v0.11.1 starting in PAPER/RESEARCH mode (no live broker exists).")
     asyncio.run(execute())
 
 

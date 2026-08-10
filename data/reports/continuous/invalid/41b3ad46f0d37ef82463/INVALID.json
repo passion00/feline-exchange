@@ -1,0 +1,18 @@
+{
+  "experiment_id": "41b3ad46f0d37ef82463",
+  "invalidated_at": "2026-08-10T07:36:37+03:00",
+  "invalidated_by_version": "0.11.1",
+  "reason": "Continuous execution accounting double-counted spread and slippage in net P/L. Fill-to-fill P/L already embedded both costs, but the v0.11.0 exporter subtracted their attribution again.",
+  "affected_metrics": [
+    "net_pnl",
+    "winner_loser_counts",
+    "win_rate",
+    "expectancy",
+    "profit_factor",
+    "strategy_aggregate_pnl",
+    "portfolio_aggregate_pnl",
+    "mae_mfe_summary"
+  ],
+  "replacement_experiment_id": "ba7eefda792791361bae",
+  "diagnostic_note": "Regime classifications remain diagnostically useful, but this experiment is invalid for profitability/performance research."
+}

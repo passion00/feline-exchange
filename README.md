@@ -1,6 +1,6 @@
-# Feline Exchange v0.11.0 — Continuous Market Research Engine
+# Feline Exchange v0.11.1 — Execution Accounting Integrity
 
-Feline Exchange is a local-first observer, deterministic execution/replay simulator, and market research platform. Version 0.11.0 adds completed-candle continuous features, deterministic regimes, and three unoptimized reference strategy families while retaining the macro-event system unchanged. It remains paper/research only.
+Feline Exchange is a local-first observer, deterministic execution/replay simulator, and market research platform. Version 0.11.1 makes continuous trade accounting explicitly reconcile frictionless reference P/L, executed-fill P/L, attributed costs, and final net P/L. Strategies, regimes, macro research, risk, and execution assumptions remain unchanged. It remains paper/research only.
 
 v0.8 studies EUR/USD after Fed/ECB-style shocks, deliberately avoiding the initial announcement race. The Qt workstation opens CSV tick data and globally ordered mixed JSONL price/macro fixtures through one replay control. It models deterministic pre-event, announcement, shock, stabilization, post-event, and complete phases; research decisions classify continuation, mean reversion, or explicit NO_TRADE.
 
