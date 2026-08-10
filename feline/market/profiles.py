@@ -65,8 +65,8 @@ MARKET_PROFILES: dict[str, MarketProfile] = {
     "EURUSD": MarketProfile("EURUSD", "fx", "USD", "FX_24_5", "closed_weekend", 1.0, 1.0, 5, 2, 0.01, 100_000.0, 100_000.0, 0.00001, 0.0001, "FX_UTC"),
     "XAUUSD": MarketProfile("XAUUSD", "spot_metal", "USD", "METAL_WEEKDAY_RESEARCH", "closed_weekend", 1.0, 1.0, 2, 3, 0.001, 100.0, 100_000.0, 0.01, None, "FX_UTC"),
     "BTCUSD": MarketProfile("BTCUSD", "crypto", "USD", "CRYPTO_24_7", "continuous", 1.0, 1.0, 2, 6, 0.000001, 2.0, 100_000.0, 0.01, None, "UTC_LIQUIDITY_SEGMENTS"),
-    # Retained compatibility profiles; v0.11.2 cross-market research targets
-    # only the three profiles above.
+    "BTCUSDT": MarketProfile("BTCUSDT", "crypto_spot", "USDT", "CRYPTO_24_7", "continuous", 1.0, 1.0, 2, 6, 0.000001, 2.0, 100_000.0, 0.01, None, "UTC_LIQUIDITY_SEGMENTS"),
+    # Retained compatibility profiles alongside the native v0.11.4 set.
     "GBPUSD": MarketProfile("GBPUSD", "fx", "USD", "FX_24_5", "closed_weekend", 1.0, 1.0, 5, 2, 0.01, 100_000.0, 100_000.0, 0.00001, 0.0001, "FX_UTC"),
     "BIST_DEMO": MarketProfile("BIST_DEMO", "equity", "TRY", "EXCHANGE", "closed_weekend", 1.0, 1.0, 2, 0, 1.0, 100_000.0, 100_000.0, 0.01, None, "EXCHANGE_LOCAL"),
     "US_DEMO": MarketProfile("US_DEMO", "equity", "USD", "EXCHANGE", "closed_weekend", 1.0, 1.0, 2, 0, 1.0, 100_000.0, 100_000.0, 0.01, None, "EXCHANGE_LOCAL"),
@@ -78,6 +78,9 @@ _RESEARCH_EXECUTION: dict[str, ExecutionProfile] = {
     "EURUSD": ExecutionProfile("research_default", "EURUSD", "synthetic_full_spread", 2.0, "bps", "fixed_adverse_per_fill", 1.0, "bps", 0.05),
     "XAUUSD": ExecutionProfile("research_default", "XAUUSD", "synthetic_full_spread", 3.0, "bps", "fixed_adverse_per_fill", 1.5, "bps", 0.05),
     "BTCUSD": ExecutionProfile("research_default", "BTCUSD", "synthetic_full_spread", 5.0, "bps", "fixed_adverse_per_fill", 2.0, "bps", 0.05),
+    "BTCUSDT": ExecutionProfile("research_default", "BTCUSDT", "synthetic_full_spread", 5.0, "bps", "fixed_adverse_per_fill", 2.0, "bps", 0.05,
+                                calibration_source="research_default", calibrated=False,
+                                notes="Uncalibrated continuity assumption copied from BTCUSD; not a Binance fee model."),
     "GBPUSD": ExecutionProfile("research_default", "GBPUSD", "synthetic_full_spread", 2.5, "bps", "fixed_adverse_per_fill", 1.0, "bps", 0.05),
     "BIST_DEMO": ExecutionProfile("research_default", "BIST_DEMO", "synthetic_full_spread", 10.0, "bps", "fixed_adverse_per_fill", 1.0, "bps", 0.05),
     "US_DEMO": ExecutionProfile("research_default", "US_DEMO", "synthetic_full_spread", 5.0, "bps", "fixed_adverse_per_fill", 1.0, "bps", 0.05),

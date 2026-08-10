@@ -1,5 +1,8 @@
 # Continuous market research
 
+v0.11.4 changes the preferred replication data foundation, not continuous
+features, regimes, or strategy thresholds. See `NATIVE_MARKET_DATA.md`.
+
 ## v0.11.1 accounting contract
 
 Continuous schema 1.1 separates `reference_gross_pnl` (frictionless mid-to-mid directional movement) from `execution_pnl` (actual fill-to-fill directional movement). Bid/ask spread and slippage are already embedded in actual fill prices. Their fields are attribution and are **not** deducted from execution P/L again:

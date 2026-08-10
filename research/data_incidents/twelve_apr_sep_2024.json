@@ -1,0 +1,10 @@
+{
+  "incident": "twelve_data_apr_sep_2024_replication_rejection",
+  "policy": "files retained; no clamping, interpolation, or correction",
+  "status": "REJECTED_FOR_MULTI_MARKET_REPLICATION",
+  "datasets": [
+    {"instrument":"EURUSD","path":"data/historical/processed/eurusd_2024-04-01_2024-09-30_1m.jsonl","sha256":"6c469e9a9e5edaf7451e1d583a8452f81bf1c4b69534e96d90a36ae9a20c5627","rows":184437,"status":"REJECTED_FOR_RESEARCH","reason":"664 systematic OHLC invariant violations and one out-of-window candle"},
+    {"instrument":"XAUUSD","path":"data/historical/processed/xauusd_2024-04-01_2024-09-30_1m.jsonl","sha256":"b9d8b34bbb9e3c8e4f12b7dd811639420f8beda8267a77789ea484b9099319c9","rows":179128,"status":"SUPERSEDED_FOR_REPLICATION","reason":"structurally clean but part of rejected cross-market corpus; native Dukascopy replacement required"},
+    {"instrument":"BTCUSD","path":"data/historical/processed/btcusd_2024-04-01_2024-09-30_1m.jsonl","sha256":"9031719ba20497c9455ab2e5a073eb3cadee972b9469230ed630f3d1daad8cfa","rows":259779,"status":"REJECTED_FOR_RESEARCH","reason":"3742 missing 24/7 minutes across 3036 gaps; largest missing interval 55 minutes"}
+  ]
+}

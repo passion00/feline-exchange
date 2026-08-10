@@ -1,5 +1,9 @@
 # Signal-locked strategy research
 
+When a dataset quality sidecar exists, signal research refuses `REJECTED`
+data. Provider normalization does not alter canonical entry, exit, overlap, R,
+or friction-overlay semantics.
+
 Feline has two deliberately different research layers. `research continuous run` is a path-dependent paper portfolio: positions, risk, protective fills, costs and equity can suppress or change later activity. `research signals run` is predictive-signal research: it records every eligible opportunity before portfolio state, resolves one immutable reference outcome, and overlays friction without changing that opportunity.
 
 ## Timing and anti-lookahead

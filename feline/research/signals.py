@@ -88,6 +88,8 @@ def _opportunity_id(checksum: str, instrument: str, timestamp: str, strategy: st
 
 def build_opportunities(dataset: Path, instrument: str, strategy: str = "all", seed: int = 17,
                         config: ContinuousConfig | None = None) -> tuple[list[SignalOpportunity], list[CandleUpdate], dict[str, Any]]:
+    from feline.research.market_data import assert_dataset_research_eligible
+    assert_dataset_research_eligible(dataset)
     config=config or ContinuousConfig();instrument=instrument.replace("/","").upper();profile=get_market_profile(instrument)
     events=read_mixed_events(dataset);candles=[row for row in events if isinstance(row,CandleUpdate) and row.instrument==instrument and row.timeframe=="1m"]
     macro=[row for row in events if isinstance(row,NormalizedEconomicEvent)];checksum=file_checksum(dataset)

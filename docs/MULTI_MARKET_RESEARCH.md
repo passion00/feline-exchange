@@ -1,5 +1,9 @@
 # Multi-market continuous research
 
+BTCUSDT is a distinct Binance Spot instrument alongside legacy BTCUSD. New
+replication datasets use Dukascopy for EURUSD/XAUUSD and Binance daily archives
+for BTCUSDT; execution defaults remain synthetic and uncalibrated.
+
 Feline v0.11.2 compares frozen continuous reference hypotheses across EURUSD, XAUUSD, and BTCUSD without ranking markets by nominal P/L. Market profiles define units and calendars; execution profiles define synthetic friction independently. Every profile and sizing input is recorded in `experiment.json`.
 
 Use `--execution-profile reference_zero_cost` only to inspect pre-friction directional behavior. Use `research_default` for the explicit uncalibrated assumptions documented in `CONTINUOUS_RESEARCH.md`. Risk-normalized runs use current equity, a 0.25% default risk budget, the unchanged normalized 10-bp stop, contract multiplier, and deterministic exposure caps.

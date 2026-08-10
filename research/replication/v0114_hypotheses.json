@@ -1,0 +1,10 @@
+{
+  "declared_before_outcomes": true,
+  "replication_interval": "[2024-04-01T00:00:00Z,2024-10-01T00:00:00Z)",
+  "frozen_configuration": {"strategy":"all","starting_equity":100000,"risk_fraction":0.0025,"execution_profile":"research_default","cost_multipliers":[0,0.25,0.5,0.75,1,1.5,2],"seed":17},
+  "primary_hypotheses": [
+    {"instrument":"EURUSD","strategy":"range_mean_reversion","criterion":"gross_expectancy_R > 0"},
+    {"instrument":"BTCUSDT","strategy":"trend_pullback","criterion":"gross_expectancy_R > 0","robustness_question":"tail concentration and six-month persistence"}
+  ],
+  "verdicts": ["REPLICATED_POSITIVE","POSITIVE_BUT_UNCERTAIN","FAILED_REPLICATION","INSUFFICIENT_DATA"]
+}

@@ -30,6 +30,10 @@ def parser() -> argparse.ArgumentParser:
     walk=subs.add_parser("walk-forward");walk.add_argument("dataset",type=Path);walk.add_argument("--train",type=int,required=True);walk.add_argument("--test",type=int,required=True)
     subs.add_parser("doctor")
     subs.add_parser("gui")
+    data=subs.add_parser("data",help="provider-native historical research data")
+    data.add_argument("action",choices=["download","quality"]);data.add_argument("dataset",type=Path,nargs="?")
+    data.add_argument("--provider",choices=["dukascopy","binance"]);data.add_argument("--instrument",required=True)
+    data.add_argument("--start");data.add_argument("--end");data.add_argument("--output",type=Path);data.add_argument("--raw-root",type=Path)
     importer=subs.add_parser("import-twelvedata",help="convert a local Twelve Data time_series JSON file to native OHLC JSONL")
     importer.add_argument("input",type=Path);importer.add_argument("output",type=Path);importer.add_argument("--instrument",required=True);importer.add_argument("--interval",default="1min",choices=["1min","5min","15min","1h"]);importer.add_argument("--timezone",default="UTC")
     macro_merge=subs.add_parser("add-macro-event",help="merge a scheduled economic event into replay JSONL")
@@ -59,6 +63,22 @@ def main() -> None:
     if args.command=="gui":
         from feline.gui.app import run_gui
         run_gui();return
+    if args.command=="data":
+        from datetime import datetime
+        if args.action=="download":
+            if not all((args.provider,args.start,args.end,args.output)):raise SystemExit("data download requires --provider --instrument --start --end --output")
+            from feline.replay.native_data import download_binance,download_dukascopy
+            if args.provider=="dukascopy":result=download_dukascopy(args.instrument,args.start,args.end,args.output,args.raw_root or Path("data/historical/raw/dukascopy"))
+            else:
+                if args.instrument.replace("/","").upper()!="BTCUSDT":raise SystemExit("Binance native archive command supports BTCUSDT")
+                result=download_binance(args.start,args.end,args.output,args.raw_root or Path("data/historical/raw/binance"))
+            print(json.dumps(result.__dict__,indent=2));return
+        if not args.dataset:raise SystemExit("data quality requires DATASET")
+        from feline.research.market_data import inspect_continuous_dataset
+        parse=lambda value:datetime.fromisoformat(value.replace("Z","+00:00")) if value else None
+        report=args.output or args.dataset.with_suffix(args.dataset.suffix+".quality.json")
+        result=inspect_continuous_dataset(args.dataset,args.instrument,parse(args.start),parse(args.end),report)
+        print(json.dumps(result.to_dict(),indent=2));raise SystemExit(0 if result.quality_status!="REJECTED" else 2)
     if args.command=="import-twelvedata":
         from feline.replay.twelvedata import convert_twelvedata_file
         count=convert_twelvedata_file(args.input,args.output,args.instrument,args.interval,args.timezone);print(json.dumps({"candles":count,"output":str(args.output),"timestamp_semantics":"provider datetime=open_time; replay timestamp=close_time"},indent=2));return
@@ -162,7 +182,7 @@ def main() -> None:
         finally:
             await runtime.stop()
             runtime.database.close()
-    print("Feline Exchange v0.11.3 starting in PAPER/RESEARCH mode (no live broker exists).")
+    print("Feline Exchange v0.11.4 starting in PAPER/RESEARCH mode (no live broker exists).")
     asyncio.run(execute())
 
 

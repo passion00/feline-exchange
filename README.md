@@ -1,6 +1,6 @@
-# Feline Exchange v0.11.3 — Signal-Locked Strategy Research
+# Feline Exchange v0.11.4 — Native Research Data & Replication
 
-Feline Exchange is a local-first observer, deterministic execution/replay simulator, and market research platform. Version 0.11.3 adds immutable signal-opportunity ledgers and cost overlays so predictive signal quality can be measured separately from path-dependent portfolio execution. Strategies, regimes, macro research, v0.11.1 accounting, and v0.11.2 market profiles remain frozen. It remains paper/research only.
+Feline Exchange is a local-first observer, deterministic execution/replay simulator, and market research platform. Version 0.11.4 adds provider-native Dukascopy and checksum-verified Binance Spot ingestion, strict non-repairing quality gates, and a frozen replication protocol. [Native data](docs/NATIVE_MARKET_DATA.md) and [replication protocol](docs/REPLICATION_PROTOCOL.md) document the workflow. Strategies and regimes remain frozen. It remains paper/research only.
 
 Continuous multi-market examples:
 
