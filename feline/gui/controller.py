@@ -9,7 +9,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from queue import Empty,Queue
 from feline.config import AppConfig
-from feline.core.events import CandleUpdate,Event,PriceTick,SignalEvent,RiskEvent,OrderUpdate,FillEvent,AIAnalysisResult,RegimeEvent,EconomicEvent
+from feline.core.events import CandleUpdate,Event,FeedHealthEvent,PriceTick,SignalEvent,RiskEvent,OrderUpdate,FillEvent,AIAnalysisResult,RegimeEvent,EconomicEvent
 from feline.replay.engine import CSVReplayProvider
 from feline.replay.mixed import read_mixed_events,replay_format
 from feline.macro.events import NormalizedEconomicEvent,ShockDetector,ShockState,event_phase,measure_horizon
@@ -81,13 +81,15 @@ class ControlledReplayProvider(CSVReplayProvider):
 class WorkstationController:
  """Real runtime bridge. Qt polls bounded projections; core never waits for UI."""
  def __init__(self,config:AppConfig|None=None,limit=2000):
-  self.config=config or AppConfig();self.replay=ReplayController();self.worker=RuntimeThread();self.research_executor=ThreadPoolExecutor(max_workers=1,thread_name_prefix="feline-research");self.messages=Queue(maxsize=limit);self.runtime=None;self.future=None;self.research_future=None;self.research_cancel=threading.Event();self.selected_instrument=None;self.dropped=0;self.macro=None;self.phase=None;self.shock=ShockState.CALM;self.strategy={"state":"WAITING_FOR_EVENT","reason":""};self.continuous=None;self.continuous_events=[];self.continuous_features=ContinuousFeatureEngine();self.continuous_regimes=ContinuousRegimeEngine();self.continuous_router=StrategyRouter();self.horizons={};self.abstentions={"evaluated":0,"trades":0,"no_trade":0};self._macro_samples=[];self.session=None;self.records={};self.completed_snapshot=None
+  self.config=config or AppConfig();self.replay=ReplayController();self.worker=RuntimeThread();self.research_executor=ThreadPoolExecutor(max_workers=1,thread_name_prefix="feline-research");self.messages=Queue(maxsize=limit);self.runtime=None;self.future=None;self.research_future=None;self.research_cancel=threading.Event();self.selected_instrument=None;self.dropped=0;self.macro=None;self.phase=None;self.shock=ShockState.CALM;self.strategy={"state":"WAITING_FOR_EVENT","reason":""};self.continuous=None;self.continuous_events=[];self.continuous_features=ContinuousFeatureEngine();self.continuous_regimes=ContinuousRegimeEngine();self.continuous_router=StrategyRouter();self.horizons={};self.abstentions={"evaluated":0,"trades":0,"no_trade":0};self._macro_samples=[];self.session=None;self.records={};self.completed_snapshot=None;self.feed={"state":"OFF","provider":None,"last_source_timestamp":None,"last_ingestion_timestamp":None};self.mode="replay"
  def _emit(self,item):
   if self.session:item.setdefault("replay_session_id",self.session["replay_session_id"])
   item.setdefault("ingestion_timestamp",datetime.now(timezone.utc).isoformat())
   try:self.messages.put_nowait(item)
   except Exception:self.dropped+=1
  async def _event(self,event):
+  if isinstance(event,FeedHealthEvent):
+   self.feed={"state":event.state,"provider":event.provider,"last_source_timestamp":event.last_source_timestamp.isoformat() if event.last_source_timestamp else None,"last_ingestion_timestamp":event.last_ingestion_timestamp.isoformat() if event.last_ingestion_timestamp else None};self._emit({"kind":"feed",**self.feed});return
   if isinstance(event,CandleUpdate):self._emit_candle(event);return
   category="MARKET" if isinstance(event,PriceTick) else "STRATEGY" if isinstance(event,SignalEvent) else "RISK" if isinstance(event,RiskEvent) else "ORDER" if isinstance(event,OrderUpdate) else "FILL" if isinstance(event,FillEvent) else "AI" if isinstance(event,AIAnalysisResult) else "SYSTEM"
   if isinstance(event,PriceTick):
@@ -100,6 +102,7 @@ class WorkstationController:
   if self.session:row.setdefault("replay_session_id",self.session["replay_session_id"])
   self.records.setdefault(category,[]).append(row)
  def start_replay(self,dataset,speed="MAX",seed=0):
+  self.mode="replay";self.feed={"state":"SYNTHETIC","provider":"replay","last_source_timestamp":None,"last_ingestion_timestamp":None}
   self.stop()
   if self.future:
    try:self.future.result(timeout=3)
@@ -125,6 +128,21 @@ class WorkstationController:
     if kind=="jsonl":self.runtime.snapshot();self.runtime.database.persist_broker_state(self.runtime.broker)
     self.replay.stop();self.completed_snapshot=self.snapshot();status="failed" if failure else "completed";self.runtime.database.save_replay_session({**self.session,"result":build_replay_report(self.session,self.completed_snapshot,self.records)},status);self._emit({"kind":"state","state":status})
   self.future=self.worker.submit(run());self._emit({"kind":"state","state":"running","dataset":dataset})
+ def start_realtime(self,instruments=("EURUSD",),environment="practice"):
+  self.stop()
+  if self.future:
+   try:self.future.result(timeout=3)
+   except Exception:pass
+  if self.runtime:self.runtime.database.close();self.runtime=None
+  from feline.market.oanda import OandaV20Provider
+  from feline.market.realtime import RealtimeIngestionProvider,RealtimeSessionConfig
+  from dataclasses import replace as dc_replace
+  source=OandaV20Provider(environment=environment);provider=RealtimeIngestionProvider(source,RealtimeSessionConfig(instruments=tuple(instruments)))
+  self.mode="realtime";self.session=None;self.records={"signals":[],"risk":[],"candles":[],"diagnostics":[]};self.feed={"state":"CONNECTING","provider":"oanda_v20","last_source_timestamp":None,"last_ingestion_timestamp":None};self.replay.start();self.worker.start();self.runtime=FelineRuntime(dc_replace(self.config,ai=dc_replace(self.config.ai,enabled=False)),provider=provider,recover=True);self.runtime.bus.subscribe(Event,self._event)
+  async def run():
+   try:await self.runtime.run()
+   finally:self.replay.stop();self.completed_snapshot=self.snapshot();self._emit({"kind":"state","state":"stopped"})
+  self.future=self.worker.submit(run());self._emit({"kind":"state","state":"running","mode":"realtime","session_id":provider.session_id});return provider.session_id
  async def _run_mixed(self,path,speed):
   from datetime import timedelta
   events=read_mixed_events(path);self.continuous_events=[event for event in events if isinstance(event,NormalizedEconomicEvent)];previous_time=None;previous_price=None;detector=ShockDetector();strategy=MacroEventStrategy();native_aggregator=NativeCandleAggregator()
@@ -169,13 +187,15 @@ class WorkstationController:
  def resume(self):self.replay.resume();self._emit({"kind":"state","state":"running"})
  def stop(self):
   self.replay.stop()
-  if self.runtime:self.runtime.running=False
+  if self.runtime:
+   self.runtime.running=False
+   if self.mode=="realtime":Path("data/REALTIME_STOP").parent.mkdir(parents=True,exist_ok=True);Path("data/REALTIME_STOP").write_text("GUI graceful stop\n")
  def emergency_stop(self):
   if self.runtime:self.runtime.risk.activate_kill_switch()
   Path("data/EMERGENCY_STOP").parent.mkdir(parents=True,exist_ok=True);Path("data/EMERGENCY_STOP").write_text("Qt emergency stop\n");self._emit({"kind":"state","state":"kill_switch"})
  def snapshot(self):
   if not self.runtime:return None
-  session_id=self.session["replay_session_id"] if self.session else None;p=self.runtime.broker.portfolio_state();return {"portfolio":p,"risk":{"trading_enabled":self.runtime.risk.trading_enabled,"kill_switch":self.runtime.risk.kill_switch,"danger":self.runtime.risk.danger.active(),"daily_pnl":self.runtime.risk.state.daily_pnl,"max_exposure":self.runtime.config.risk.max_total_exposure},"prices":{k:{"bid":v.bid,"ask":v.ask,"mid":v.mid,"spread":v.spread_ratio,"regime":self.runtime.regimes.current.get(k).value if k in self.runtime.regimes.current else "unknown"} for k,v in self.runtime.broker.quotes.items()},"ai":{"queue":self.runtime.ai.queue.qsize(),"available":self.runtime.ai.last_available,"model":self.runtime.config.ai.model},"positions":[vars(x) for x in self.runtime.broker.positions.values()],"orders":[{**x.payload(),"replay_session_id":session_id} for x in self.runtime.broker.orders.values()],"fills":[{**x.payload(),"replay_session_id":session_id} for x in self.runtime.broker.fills[-100:]],"trades":[{**vars(x),"replay_session_id":session_id} for x in self.runtime.trades.completed],"macro":vars(self.macro) if self.macro else None,"phase":self.phase,"shock":self.shock.value,"strategy":self.strategy,"continuous":self.continuous,"horizons":self.horizons,"abstentions":self.abstentions,"replay_session_id":session_id,"dropped":self.dropped}
+  session_id=self.session["replay_session_id"] if self.session else self.runtime.realtime_session_id;p=self.runtime.broker.portfolio_state();return {"portfolio":p,"risk":{"trading_enabled":self.runtime.risk.trading_enabled,"kill_switch":self.runtime.risk.kill_switch,"danger":self.runtime.risk.danger.active(),"daily_pnl":self.runtime.risk.state.daily_pnl,"max_exposure":self.runtime.config.risk.max_total_exposure},"prices":{k:{"bid":v.bid,"ask":v.ask,"mid":v.mid,"spread":v.spread_ratio,"regime":self.runtime.regimes.current.get(k).value if k in self.runtime.regimes.current else "unknown"} for k,v in self.runtime.broker.quotes.items()},"ai":{"queue":self.runtime.ai.queue.qsize(),"available":self.runtime.ai.last_available,"model":self.runtime.config.ai.model},"positions":[vars(x) for x in self.runtime.broker.positions.values()],"orders":[{**x.payload(),"replay_session_id":session_id} for x in self.runtime.broker.orders.values()],"fills":[{**x.payload(),"replay_session_id":session_id} for x in self.runtime.broker.fills[-100:]],"trades":[{**vars(x),"replay_session_id":session_id} for x in self.runtime.trades.completed],"macro":vars(self.macro) if self.macro else None,"phase":self.phase,"shock":self.shock.value,"strategy":self.strategy,"continuous":self.continuous,"horizons":self.horizons,"abstentions":self.abstentions,"replay_session_id":session_id,"realtime_session_id":self.runtime.realtime_session_id,"feed":self.feed,"mode":self.mode,"dropped":self.dropped}
  def build_report(self):
   if not self.session or not self.completed_snapshot:raise RuntimeError("no completed replay result")
   return build_replay_report(self.session,self.completed_snapshot,self.records)

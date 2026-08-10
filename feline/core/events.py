@@ -68,6 +68,9 @@ class PriceTick(Event):
     ask: float
     volume: float = 0.0
     source: str = "unknown"
+    ingestion_timestamp: datetime | None = None
+    provider_sequence: int | None = None
+    realtime_session_id: str | None = None
 
     @property
     def mid(self) -> float:
@@ -215,6 +218,16 @@ class RegimeEvent(Event):
     previous: Regime
     current: Regime
     metrics: dict[str, float]
+
+
+@dataclass(frozen=True, kw_only=True)
+class FeedHealthEvent(Event):
+    provider: str
+    state: str
+    realtime_session_id: str
+    last_source_timestamp: datetime | None = None
+    last_ingestion_timestamp: datetime | None = None
+    message: str = ""
 
 
 @dataclass(frozen=True, kw_only=True)

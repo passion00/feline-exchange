@@ -1,6 +1,6 @@
-# Feline Exchange v0.12.0 — Reliable Production Data Feed
+# Feline Exchange v0.13.0 — Realtime Market Ingestion
 
-Feline Exchange is a local-first observer, deterministic execution/replay simulator, and market research platform. Version 0.12 introduces an interchangeable historical/realtime feed contract, selects OANDA v20 as the primary authenticated FX feed, retains Dukascopy as the provider-native historical audit source, and retains checksum-verified Binance Spot archives for crypto. Strict non-repairing validation, immutable caching, and provenance protect research. See [Reliable data feeds](docs/RELIABLE_DATA_FEED.md). It remains paper/research only; no live-order path exists.
+Feline Exchange is a local-first observer, deterministic execution/replay simulator, and market research platform. Version 0.13 connects OANDA v20 streaming quotes to the authoritative event, completed-candle, indicator, regime, strategy, deterministic risk, persistence, and paper-execution path. Feed degradation blocks new orders and is visible in CLI/GUI health. See [Realtime paper ingestion](docs/REALTIME_INGESTION.md). It remains paper/research only; no live-order path exists.
 
 Continuous multi-market examples:
 

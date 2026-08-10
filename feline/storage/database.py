@@ -5,7 +5,7 @@ import sqlite3
 from pathlib import Path
 from threading import Lock
 
-from feline.core.events import AIAnalysisResult, CandleUpdate, Event,FillEvent,FinancingEvent, NewsEvent, OrderRequest,OrderType,OrderUpdate, PortfolioSnapshot, PriceTick, RegimeEvent, RiskEvent,Side, SignalEvent
+from feline.core.events import AIAnalysisResult, CandleUpdate, Event,FeedHealthEvent,FillEvent,FinancingEvent, NewsEvent, OrderRequest,OrderType,OrderUpdate, PortfolioSnapshot, PriceTick, RegimeEvent, RiskEvent,Side, SignalEvent
 from feline.portfolio.models import Position
 from feline.execution.models import PendingOrder
 from .migrations import MIGRATIONS
@@ -66,7 +66,7 @@ class Database:
             self.connection.commit()
 
     def count(self, table: str) -> int:
-        allowed = {"market_events", "news_events", "ai_analyses", "signals", "paper_orders", "paper_trades", "positions", "portfolio_snapshots", "risk_events", "system_events", "candles", "regime_events","fills","financing_charges","pending_orders","experiments","walk_forward_windows","replay_sessions","dataset_registry","research_experiments","research_episodes","event_results","aggregate_results","research_exclusions","research_post_shock_metrics"}
+        allowed = {"market_events", "news_events", "ai_analyses", "signals", "paper_orders", "paper_trades", "positions", "portfolio_snapshots", "risk_events", "system_events", "candles", "regime_events","fills","financing_charges","pending_orders","experiments","walk_forward_windows","replay_sessions","realtime_sessions","realtime_quotes","dataset_registry","research_experiments","research_episodes","event_results","aggregate_results","research_exclusions","research_post_shock_metrics"}
         if table not in allowed:
             raise ValueError("Invalid table")
         return int(self.connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0])
@@ -142,6 +142,17 @@ class Database:
     def save_replay_session(self,session:dict,status:str)->None:
         with self.lock:
             self.connection.execute("INSERT INTO replay_sessions VALUES(?,?,?,?,?,?,?) ON CONFLICT(replay_session_id) DO UPDATE SET ended_at=excluded.ended_at,status=excluded.status,payload=excluded.payload",(session["replay_session_id"],session["dataset_path"],session["dataset_checksum"],session.get("replay_start_timestamp"),session.get("replay_end_timestamp"),status,json.dumps(session,default=str)))
+            self.connection.commit()
+
+    def save_realtime_session(self,session:dict,status:str)->None:
+        with self.lock:
+            self.connection.execute("INSERT INTO realtime_sessions VALUES(?,?,?,?,?,?,?) ON CONFLICT(realtime_session_id) DO UPDATE SET ended_at=excluded.ended_at,status=excluded.status,payload=excluded.payload",(session["realtime_session_id"],session["provider"],json.dumps(session["instruments"]),session["started_at"],session.get("ended_at"),status,json.dumps(session,default=str)))
+            self.connection.commit()
+
+    def save_realtime_quote(self,tick:PriceTick)->None:
+        if not tick.realtime_session_id or not tick.ingestion_timestamp:return
+        with self.lock:
+            self.connection.execute("INSERT OR IGNORE INTO realtime_quotes VALUES(?,?,?,?,?,?,?,?,?)",(tick.id,tick.realtime_session_id,tick.timestamp.isoformat(),tick.ingestion_timestamp.isoformat(),tick.instrument,tick.bid,tick.ask,tick.provider_sequence,json.dumps(tick.payload())))
             self.connection.commit()
 
     def register_dataset(self,record)->None:

@@ -46,4 +46,9 @@ MIGRATIONS: tuple[str, ...] = (
     """
     CREATE TABLE IF NOT EXISTS research_post_shock_metrics (experiment_id TEXT NOT NULL,event_id TEXT NOT NULL,payload TEXT NOT NULL,PRIMARY KEY(experiment_id,event_id));
     """,
+    """
+    CREATE TABLE IF NOT EXISTS realtime_sessions (realtime_session_id TEXT PRIMARY KEY,provider TEXT NOT NULL,instruments TEXT NOT NULL,started_at TEXT NOT NULL,ended_at TEXT,status TEXT NOT NULL,payload TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS realtime_quotes (id TEXT PRIMARY KEY,realtime_session_id TEXT NOT NULL,source_timestamp TEXT NOT NULL,ingestion_timestamp TEXT NOT NULL,instrument TEXT NOT NULL,bid REAL NOT NULL,ask REAL NOT NULL,sequence INTEGER,payload TEXT NOT NULL,FOREIGN KEY(realtime_session_id) REFERENCES realtime_sessions(realtime_session_id));
+    CREATE INDEX IF NOT EXISTS idx_realtime_quotes_session_time ON realtime_quotes(realtime_session_id,source_timestamp);
+    """,
 )

@@ -23,6 +23,8 @@ def parser() -> argparse.ArgumentParser:
     run.add_argument("--duration", type=float)
     paper = subs.add_parser("paper")
     paper.add_argument("--duration", type=float)
+    realtime=subs.add_parser("realtime",help="start/stop read-only OANDA ingestion with paper execution")
+    realtime.add_argument("action",choices=["start","stop"]);realtime.add_argument("--instrument",action="append",default=[]);realtime.add_argument("--duration",type=float);realtime.add_argument("--environment",choices=["practice","live"],default="practice")
     subs.add_parser("stop", help="activate the persistent emergency-stop marker")
     replay=subs.add_parser("replay")
     replay.add_argument("csv",type=Path); replay.add_argument("--speed",default="max"); replay.add_argument("--strategy",default="reference",choices=["reference"]); replay.add_argument("--seed",type=int,default=0); replay.add_argument("--report",type=Path)
@@ -53,6 +55,8 @@ def main() -> None:
         stop_file.write_text("Emergency stop requested. Remove deliberately before restarting.\n")
         print("Emergency stop activated; new runtime starts are blocked.")
         return
+    if args.command=="realtime" and args.action=="stop":
+        marker=Path("data/REALTIME_STOP");marker.parent.mkdir(parents=True,exist_ok=True);marker.write_text("Graceful realtime stop requested.\n");print("Realtime paper stop requested.");return
     if args.command == "status":
         from feline.storage.database import Database
         db=Database(Path(config.database_path)); health=db.health(); db.close()
@@ -153,6 +157,19 @@ def main() -> None:
             from feline.research.engine import run_experiment
             result=run_experiment(args.paths[0],config,args.output_root or Path("data/reports/research"),args.fail_fast);result={"experiment":result["experiment"],"aggregate":result["aggregate"],"output_directory":result["output_directory"]}
         print(json.dumps(result,indent=2,default=str));return
+    if args.command=="realtime":
+        from dataclasses import replace
+        from feline.market.datafeed import HTTPPolicy,RetryingHTTPClient
+        from feline.market.oanda import OandaV20Provider
+        from feline.market.realtime import RealtimeIngestionProvider,RealtimeSessionConfig
+        instruments=tuple(x.replace("/","").upper() for x in (args.instrument or ["EURUSD"]));
+        try:provider=OandaV20Provider(environment=args.environment,client=RetryingHTTPClient(HTTPPolicy(timeout_seconds=30,retries=4,minimum_interval_seconds=.1)))
+        except ValueError as exc:raise SystemExit(str(exc)) from None
+        ingestion=RealtimeIngestionProvider(provider,RealtimeSessionConfig(instruments=instruments));runtime=FelineRuntime(replace(config,ai=replace(config.ai,enabled=False)),provider=ingestion,recover=True)
+        async def realtime_run():
+            try:await runtime.run(args.duration)
+            finally:await runtime.stop();runtime.database.close()
+        print(json.dumps({"mode":"realtime_paper","provider":"oanda_v20","instruments":instruments,"session_id":ingestion.session_id,"live_orders":False},indent=2));asyncio.run(realtime_run());return
     if stop_file.exists():
         raise SystemExit("Emergency stop is active (data/EMERGENCY_STOP).")
     if args.command=="replay":
@@ -190,7 +207,7 @@ def main() -> None:
         finally:
             await runtime.stop()
             runtime.database.close()
-    print("Feline Exchange v0.12.0 starting in PAPER/RESEARCH mode (no live broker exists).")
+    print("Feline Exchange v0.13.0 starting in PAPER/RESEARCH mode (no live broker exists).")
     asyncio.run(execute())
 
 

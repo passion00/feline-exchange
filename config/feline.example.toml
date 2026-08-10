@@ -13,6 +13,10 @@ historical_price_basis = "mid"
 timeout_seconds = 30.0
 max_retries = 4
 stale_after_seconds = 10.0
+feed_timeout_seconds = 15.0
+reconnect_delay_seconds = 1.0
+maximum_reconnect_delay_seconds = 30.0
+instruments = ["EURUSD"]
 
 [providers.alpha_vantage]
 enabled = false

@@ -6,7 +6,7 @@ from pathlib import Path
 
 from feline.config import AppConfig
 from feline.core.bus import EventBus
-from feline.core.events import AIAnalysisResult, CandleUpdate, EconomicEvent, EmergencyEvent,FillEvent,FinancingEvent, NewsEvent, OrderRequest, PortfolioSnapshot, PriceTick, Regime, RegimeEvent, RiskEvent, SignalEvent
+from feline.core.events import AIAnalysisResult, CandleUpdate, EconomicEvent, EmergencyEvent,FeedHealthEvent,FillEvent,FinancingEvent, NewsEvent, OrderRequest, PortfolioSnapshot, PriceTick, Regime, RegimeEvent, RiskEvent, SignalEvent
 from feline.execution.paper import PaperBroker
 from feline.intelligence.service import AIWorker, AnalysisJob, LlamaCppClient
 from feline.market.providers import MarketDataProvider, MockMarketDataProvider
@@ -48,6 +48,8 @@ class FelineRuntime:
         self.exposure_samples = 0
         self.emergency_stop_path = Path("data/EMERGENCY_STOP")
         self.running = False
+        self.realtime_session_id=getattr(self.provider,"session_id",None);self.feed_trading_ready=not bool(self.realtime_session_id);self.feed_state="OFF"
+        if self.realtime_session_id:self.provider.health_callback=self._feed_health
         self.ai = AIWorker(config.ai, ai_client or LlamaCppClient(config.ai), self.bus.publish)
         recovered = self.database.recover_broker_state() or self.database.latest_portfolio()
         if recovered and recover: self.broker.restore(*recovered)
@@ -57,8 +59,13 @@ class FelineRuntime:
         self.database.save_health("news_provider","not_configured",{})
         self.database.save_health("economic_calendar","not_configured",{})
         self.database.save_health("ai","unknown",{"queue_depth":0})
-        for event_type in (PriceTick, CandleUpdate, RegimeEvent, SignalEvent, RiskEvent, AIAnalysisResult, EmergencyEvent):
+        for event_type in (PriceTick, CandleUpdate, RegimeEvent, SignalEvent, RiskEvent, AIAnalysisResult, EmergencyEvent,FeedHealthEvent):
             self.bus.subscribe(event_type, self._persist)
+
+    async def _feed_health(self,event:FeedHealthEvent)->None:
+        self.feed_state=event.state;self.feed_trading_ready=event.state=="HEALTHY"
+        self.database.save_health("market_provider",event.state.lower(),{"provider":event.provider,"session":event.realtime_session_id,"last_source_timestamp":event.last_source_timestamp.isoformat() if event.last_source_timestamp else None,"last_ingestion_timestamp":event.last_ingestion_timestamp.isoformat() if event.last_ingestion_timestamp else None,"message":event.message})
+        await self.bus.publish(event)
 
     async def _persist(self, event) -> None:
         if self.replay_session_id and getattr(event,"replay_session_id",None) is None:event=__import__('dataclasses').replace(event,replay_session_id=self.replay_session_id)
@@ -70,6 +77,7 @@ class FelineRuntime:
         if self.replay_session_id and tick.replay_session_id != self.replay_session_id:
             tick = __import__('dataclasses').replace(tick,replay_session_id=self.replay_session_id)
         self.last_market_timestamp=tick.timestamp
+        if tick.realtime_session_id:self.database.save_realtime_quote(tick)
         self.trades.update(tick.instrument,tick.bid,tick.ask)
         before_realized=sum(p.realized_pnl for p in self.broker.positions.values())
         protective_updates=await self.broker.process_quote(tick)
@@ -103,11 +111,14 @@ class FelineRuntime:
         if portfolio["exposure"]>0:self.exposure_samples+=1
         self.risk.update_account(daily_pnl=portfolio["realized_pnl"],equity=portfolio["equity"],peak_equity=self.peak_equity)
         if self.tick_count % self.config.snapshot_interval_ticks==0:self.snapshot()
-        self.database.save_health("market_provider","connected",{"last_tick":tick.timestamp.isoformat(),"source":tick.source})
+        self.database.save_health("market_provider","healthy" if tick.realtime_session_id else "connected",{"last_tick":tick.timestamp.isoformat(),"ingestion_timestamp":tick.ingestion_timestamp.isoformat() if tick.ingestion_timestamp else None,"source":tick.source,"realtime_session_id":tick.realtime_session_id})
         self.database.save_health("risk","kill_switch" if self.risk.kill_switch else "ok",{"danger_mode":self.risk.danger.active(tick.timestamp)})
         await self.bus.publish(tick)
 
     async def request_order(self, order: OrderRequest):
+        if self.realtime_session_id and not self.feed_trading_ready:
+            decision=RiskEvent(approved=False,rule="market_feed",message=f"Realtime feed is {self.feed_state}; stale/disconnected data cannot create orders",severity="high",order_request_id=order.id,correlation_id=order.correlation_id)
+            await self.bus.publish(decision);return decision
         decision = self.risk.approve_order(order, self.broker.get_quote(order.instrument), self.broker.get_positions())
         await self.bus.publish(decision)
         if not decision.approved:
@@ -141,7 +152,12 @@ class FelineRuntime:
 
     async def run(self, duration: float | None = None) -> None:
         self.running = True
+        realtime_stop_path=Path("data/REALTIME_STOP")
+        if self.realtime_session_id:realtime_stop_path.unlink(missing_ok=True)
         self.ai.start()
+        realtime_session=None
+        if self.realtime_session_id:
+            now=__import__('datetime').datetime.now(__import__('datetime').timezone.utc).isoformat();realtime_session={"realtime_session_id":self.realtime_session_id,"provider":self.provider.source.capabilities.provider,"instruments":list(self.provider.config.instruments),"started_at":now,"ended_at":None,"status":"running","feline_version":__import__('feline').__version__,"mode":"realtime_paper","paper_only":True};self.database.save_realtime_session(realtime_session,"running")
         async def loop():
             try:
                 async for tick in self.provider.stream():
@@ -156,6 +172,14 @@ class FelineRuntime:
             except Exception as exc:
                 self.database.save_health("market_provider","failed",{"error":type(exc).__name__})
         task = asyncio.create_task(loop())
+        async def monitor_stop():
+            while self.running and self.realtime_session_id:
+                if realtime_stop_path.exists():
+                    self.running=False;stop=getattr(self.provider,"stop",None)
+                    if stop:await stop()
+                    break
+                await asyncio.sleep(.5)
+        monitor=asyncio.create_task(monitor_stop()) if self.realtime_session_id else None
         try:
             if duration is None:
                 await task
@@ -165,14 +189,19 @@ class FelineRuntime:
             self.running = False
             task.cancel()
             await asyncio.gather(task, return_exceptions=True)
+            if monitor:monitor.cancel();await asyncio.gather(monitor,return_exceptions=True)
             await self.bus.drain()
             for candle in self.candles.flush(): self.database.persist_event(candle)
             self.snapshot()
             self.database.persist_broker_state(self.broker)
             self.database.save_health("market_provider","disconnected",{})
+            if realtime_session:
+                realtime_session.update({"ended_at":__import__('datetime').datetime.now(__import__('datetime').timezone.utc).isoformat(),"status":"completed","quotes":self.tick_count,"last_source_timestamp":self.last_market_timestamp.isoformat() if self.last_market_timestamp else None});self.database.save_realtime_session(realtime_session,"completed")
 
     async def stop(self) -> None:
         self.running = False
+        stop=getattr(self.provider,"stop",None)
+        if stop:await stop()
         await self.ai.stop()
         await self.bus.drain()
         ai_status="not_checked" if self.ai.last_available is None else "available" if self.ai.last_available else "unavailable"
