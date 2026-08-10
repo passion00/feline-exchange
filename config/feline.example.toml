@@ -78,3 +78,31 @@ pullback_max = 0.0015
 range_entry_zscore = 0.8
 event_minutes_before = 30.0
 event_minutes_after = 30.0
+
+[continuous.risk_sizing]
+mode = "risk"
+starting_equity = 100000.0
+risk_fraction = 0.0025
+
+[markets.EURUSD]
+profile = "EURUSD"
+[markets.XAUUSD]
+profile = "XAUUSD"
+[markets.BTCUSD]
+profile = "BTCUSD"
+
+[execution_profiles.EURUSD.research_default]
+spread_bps = 2.0
+base_slippage_bps = 1.0
+spread_dependent_slippage = 0.05
+calibrated = false
+[execution_profiles.XAUUSD.research_default]
+spread_bps = 3.0
+base_slippage_bps = 1.5
+spread_dependent_slippage = 0.05
+calibrated = false
+[execution_profiles.BTCUSD.research_default]
+spread_bps = 5.0
+base_slippage_bps = 2.0
+spread_dependent_slippage = 0.05
+calibrated = false

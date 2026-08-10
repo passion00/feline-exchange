@@ -34,7 +34,7 @@ def parser() -> argparse.ArgumentParser:
     importer.add_argument("input",type=Path);importer.add_argument("output",type=Path);importer.add_argument("--instrument",required=True);importer.add_argument("--interval",default="1min",choices=["1min","5min","15min","1h"]);importer.add_argument("--timezone",default="UTC")
     macro_merge=subs.add_parser("add-macro-event",help="merge a scheduled economic event into replay JSONL")
     macro_merge.add_argument("input",type=Path);macro_merge.add_argument("output",type=Path);macro_merge.add_argument("--timestamp",required=True);macro_merge.add_argument("--event-id",required=True);macro_merge.add_argument("--title",required=True);macro_merge.add_argument("--source",default="federal_reserve");macro_merge.add_argument("--region",default="US");macro_merge.add_argument("--instrument",default="EURUSD")
-    research=subs.add_parser("research",help="historical macro and continuous research tools");research.add_argument("action",choices=["validate","inspect","run","summarize","import-directory","corpus","compare","features","continuous"]);research.add_argument("paths",type=Path,nargs="*");research.add_argument("--instrument",default="EURUSD");research.add_argument("--interval",default="1min");research.add_argument("--timezone",default="UTC");research.add_argument("--output-root",type=Path);research.add_argument("--fail-fast",action="store_true");research.add_argument("--central-bank",default="FOMC",choices=["FOMC"]);research.add_argument("--years",type=int,nargs="+");research.add_argument("--provider",default="twelvedata",choices=["twelvedata"]);research.add_argument("--run",action="store_true");research.add_argument("--dry-run",action="store_true");research.add_argument("--force-download",action="store_true");research.add_argument("--skip-download",action="store_true");research.add_argument("--strategy",default="all",choices=["all","trend_pullback","range_mean_reversion","volatility_breakout"]);research.add_argument("--seed",type=int,default=0);research.add_argument("--no-trades",action="store_true")
+    research=subs.add_parser("research",help="historical macro and continuous research tools");research.add_argument("action",choices=["validate","inspect","run","summarize","import-directory","corpus","compare","features","continuous"]);research.add_argument("paths",type=Path,nargs="*");research.add_argument("--instrument",default="EURUSD");research.add_argument("--interval",default="1min");research.add_argument("--timezone",default="UTC");research.add_argument("--output-root",type=Path);research.add_argument("--fail-fast",action="store_true");research.add_argument("--central-bank",default="FOMC",choices=["FOMC"]);research.add_argument("--years",type=int,nargs="+");research.add_argument("--provider",default="twelvedata",choices=["twelvedata"]);research.add_argument("--run",action="store_true");research.add_argument("--dry-run",action="store_true");research.add_argument("--force-download",action="store_true");research.add_argument("--skip-download",action="store_true");research.add_argument("--strategy",default="all",choices=["all","trend_pullback","range_mean_reversion","volatility_breakout"]);research.add_argument("--seed",type=int,default=0);research.add_argument("--no-trades",action="store_true");research.add_argument("--sizing",choices=["risk","fixed"],default="risk");research.add_argument("--risk-fraction",type=float,default=.0025);research.add_argument("--starting-equity",type=float,default=100000.);research.add_argument("--execution-profile",choices=["research_default","reference_zero_cost"],default="research_default");research.add_argument("--comparison-basis",choices=["native","common"],default="native")
     return result
 
 
@@ -67,9 +67,15 @@ def main() -> None:
         count=add_economic_event(args.input,args.output,args.timestamp,args.event_id,args.title,args.source,args.region,args.instrument);print(json.dumps({"events":count,"output":str(args.output)},indent=2));return
     if args.command=="research":
         if args.action=="continuous":
-            if len(args.paths)!=2 or str(args.paths[0])!="run":raise SystemExit("research continuous requires run DATASET")
-            from feline.research.continuous import ContinuousConfig,run_continuous_experiment
-            result=run_continuous_experiment(args.paths[1],args.instrument,args.strategy,args.seed,args.no_trades,args.output_root or Path("data/reports/continuous"),ContinuousConfig(**config.continuous))
+            if not args.paths or str(args.paths[0]) not in {"run","compare"}:raise SystemExit("research continuous requires run DATASET or compare REPORT...")
+            if str(args.paths[0])=="compare":
+                from feline.research.continuous_compare import compare_continuous_experiments
+                result=compare_continuous_experiments(args.paths[1:],args.output_root or Path("data/reports/continuous/comparisons"),args.comparison_basis)
+            else:
+                if len(args.paths)!=2:raise SystemExit("research continuous run requires one DATASET")
+                from feline.research.continuous import ContinuousConfig,run_continuous_experiment
+                overrides=config.execution_profiles.get(args.instrument,{}).get(args.execution_profile,{})
+                result=run_continuous_experiment(args.paths[1],args.instrument,args.strategy,args.seed,args.no_trades,args.output_root or Path("data/reports/continuous"),ContinuousConfig(**config.continuous),sizing=args.sizing,risk_fraction=args.risk_fraction,starting_equity=args.starting_equity,execution_profile=args.execution_profile,execution_profile_overrides=overrides)
         elif args.action=="features":
             if len(args.paths)<2 or str(args.paths[0]) not in {"build","analyze"}:raise SystemExit("research features requires build EXPERIMENT... or analyze FEATURES.csv")
             if str(args.paths[0])=="build":
@@ -145,7 +151,7 @@ def main() -> None:
         finally:
             await runtime.stop()
             runtime.database.close()
-    print("Feline Exchange v0.11.1 starting in PAPER/RESEARCH mode (no live broker exists).")
+    print("Feline Exchange v0.11.2 starting in PAPER/RESEARCH mode (no live broker exists).")
     asyncio.run(execute())
 
 

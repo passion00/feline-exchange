@@ -1,6 +1,16 @@
-# Feline Exchange v0.11.1 — Execution Accounting Integrity
+# Feline Exchange v0.11.2 — Multi-Market Research & Risk Normalization
 
-Feline Exchange is a local-first observer, deterministic execution/replay simulator, and market research platform. Version 0.11.1 makes continuous trade accounting explicitly reconcile frictionless reference P/L, executed-fill P/L, attributed costs, and final net P/L. Strategies, regimes, macro research, risk, and execution assumptions remain unchanged. It remains paper/research only.
+Feline Exchange is a local-first observer, deterministic execution/replay simulator, and market research platform. Version 0.11.2 adds explicit EURUSD, XAUUSD, and BTCUSD market/execution profiles, standardized risk sizing, R-multiple/equity/drawdown analytics, and read-only cross-market comparison. Strategies, regimes, macro research, and the corrected v0.11.1 accounting contract remain frozen. It remains paper/research only.
+
+Continuous multi-market examples:
+
+```bash
+python3 -m feline research continuous run DATASET --instrument XAUUSD --strategy all --sizing risk --risk-fraction 0.0025 --starting-equity 100000 --execution-profile research_default --seed 17
+python3 -m feline research continuous run DATASET --instrument XAUUSD --strategy all --sizing risk --execution-profile reference_zero_cost --seed 17
+python3 -m feline research continuous compare REPORT_EURUSD REPORT_XAUUSD REPORT_BTCUSD --comparison-basis native
+```
+
+`reference_zero_cost` is a frictionless descriptive control, never a realistic execution claim. All research-default execution profiles are explicitly uncalibrated.
 
 v0.8 studies EUR/USD after Fed/ECB-style shocks, deliberately avoiding the initial announcement race. The Qt workstation opens CSV tick data and globally ordered mixed JSONL price/macro fixtures through one replay control. It models deterministic pre-event, announcement, shock, stabilization, post-event, and complete phases; research decisions classify continuation, mean reversion, or explicit NO_TRADE.
 

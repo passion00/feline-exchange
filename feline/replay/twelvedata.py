@@ -10,6 +10,8 @@ def convert_twelvedata_file(input_path:Path,output_path:Path,instrument:str,inte
     """Convert a downloaded time_series response. Provider datetime is candle-open time."""
     if interval not in INTERVALS:raise ValueError(f"unsupported interval: {interval}")
     if timezone_name.upper()!="UTC":raise ValueError("v0.8.2 local importer requires explicit UTC provider timestamps")
+    instrument=instrument.replace("/","").upper()
+    if instrument not in {"EURUSD","XAUUSD","BTCUSD"}:raise ValueError(f"unsupported Twelve Data research symbol: {instrument}")
     payload=json.loads(input_path.read_text(encoding="utf-8"));values=payload.get("values")
     if not isinstance(values,list):raise ValueError("Twelve Data response has no values array")
     rows=[]

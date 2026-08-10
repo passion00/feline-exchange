@@ -73,6 +73,9 @@ class AppConfig:
     snapshot_interval_ticks: int = 20
     providers: dict = field(default_factory=dict)
     continuous: dict = field(default_factory=dict)
+    markets: dict = field(default_factory=dict)
+    execution_profiles: dict = field(default_factory=dict)
+    continuous_risk_sizing: dict = field(default_factory=dict)
 
 
 def load_config(path: Path | None = None) -> AppConfig:
@@ -80,6 +83,8 @@ def load_config(path: Path | None = None) -> AppConfig:
     mode = data.get("mode", "paper")
     if mode != "paper":
         raise ValueError("Feline v0.1 supports paper mode only")
+    continuous = dict(data.get("continuous", {}))
+    continuous_risk_sizing = dict(continuous.pop("risk_sizing", {}))
     return AppConfig(
         mode=mode,
         database_path=str(data.get("database_path", "data/feline.db")),
@@ -91,5 +96,8 @@ def load_config(path: Path | None = None) -> AppConfig:
         strategy=StrategyConfig(**data.get("strategy", {})),
         snapshot_interval_ticks=max(1, int(data.get("snapshot_interval_ticks", 20))),
         providers=data.get("providers",{}),
-        continuous=data.get("continuous",{}),
+        continuous=continuous,
+        markets=data.get("markets",{}),
+        execution_profiles=data.get("execution_profiles",{}),
+        continuous_risk_sizing=continuous_risk_sizing,
     )
