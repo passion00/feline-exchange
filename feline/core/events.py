@@ -134,6 +134,7 @@ class SignalEvent(Event):
     regime: str = "unknown"
     reason: str = ""
     strategy_version: str = "unknown"
+    realtime_session_id: str | None = None
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -276,3 +277,4 @@ class AIAnalysisResult(Event):
     affected_signal_id: str | None = None
     downstream_decision: str = "advisory_only"
     vetoed: bool = False
+    realtime_session_id: str | None = None

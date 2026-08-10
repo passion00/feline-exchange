@@ -66,7 +66,7 @@ class Database:
             self.connection.commit()
 
     def count(self, table: str) -> int:
-        allowed = {"market_events", "news_events", "ai_analyses", "signals", "paper_orders", "paper_trades", "positions", "portfolio_snapshots", "risk_events", "system_events", "candles", "regime_events","fills","financing_charges","pending_orders","experiments","walk_forward_windows","replay_sessions","realtime_sessions","realtime_quotes","dataset_registry","research_experiments","research_episodes","event_results","aggregate_results","research_exclusions","research_post_shock_metrics"}
+        allowed = {"market_events", "news_events", "ai_analyses", "signals", "paper_orders", "paper_trades", "trades", "positions", "portfolio_snapshots", "risk_events", "system_events", "candles", "regime_events","fills","financing_charges","pending_orders","experiments","walk_forward_windows","replay_sessions","realtime_sessions","realtime_quotes","realtime_validation_summaries","dataset_registry","research_experiments","research_episodes","event_results","aggregate_results","research_exclusions","research_post_shock_metrics"}
         if table not in allowed:
             raise ValueError("Invalid table")
         return int(self.connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0])
@@ -153,6 +153,17 @@ class Database:
         if not tick.realtime_session_id or not tick.ingestion_timestamp:return
         with self.lock:
             self.connection.execute("INSERT OR IGNORE INTO realtime_quotes VALUES(?,?,?,?,?,?,?,?,?)",(tick.id,tick.realtime_session_id,tick.timestamp.isoformat(),tick.ingestion_timestamp.isoformat(),tick.instrument,tick.bid,tick.ask,tick.provider_sequence,json.dumps(tick.payload())))
+            self.connection.commit()
+
+    def save_realtime_validation(self,summary:dict)->None:
+        with self.lock:
+            self.connection.execute("INSERT OR REPLACE INTO realtime_validation_summaries VALUES(?,?,?,?,?,?)",(summary["validation_session_id"],summary["realtime_session_id"],summary["validation_mode"],summary["created_at"],summary["validation_status"],json.dumps(summary,default=str,sort_keys=True)))
+            self.connection.commit()
+
+    def save_trade(self,trade,status:str)->None:
+        payload=json.dumps(__import__('dataclasses').asdict(trade),default=str,sort_keys=True)
+        with self.lock:
+            self.connection.execute("INSERT OR REPLACE INTO trades VALUES(?,?,?,?,?,?)",(trade.trade_id,trade.instrument,status,trade.entry_time.isoformat(),trade.exit_time.isoformat() if trade.exit_time else None,payload))
             self.connection.commit()
 
     def register_dataset(self,record)->None:

@@ -24,7 +24,8 @@ def parser() -> argparse.ArgumentParser:
     paper = subs.add_parser("paper")
     paper.add_argument("--duration", type=float)
     realtime=subs.add_parser("realtime",help="start/stop read-only OANDA ingestion with paper execution")
-    realtime.add_argument("action",choices=["start","stop"]);realtime.add_argument("--instrument",action="append",default=[]);realtime.add_argument("--duration",type=float);realtime.add_argument("--environment",choices=["practice","live"],default="practice")
+    realtime.add_argument("action",choices=["start","stop"]);realtime.add_argument("--instrument",action="append",default=[]);realtime.add_argument("--duration",type=float);realtime.add_argument("--environment",choices=["practice","live"],default="practice");realtime.add_argument("--validation-mode",choices=["deterministic","advisory","confirm_or_veto"]);realtime.add_argument("--validation-output",type=Path,default=Path("data/reports/realtime_validation"))
+    validation=subs.add_parser("validation",help="inspect/compare realtime paper validation summaries");validation.add_argument("action",choices=["inspect","compare"]);validation.add_argument("paths",type=Path,nargs="+");validation.add_argument("--output",type=Path)
     subs.add_parser("stop", help="activate the persistent emergency-stop marker")
     replay=subs.add_parser("replay")
     replay.add_argument("csv",type=Path); replay.add_argument("--speed",default="max"); replay.add_argument("--strategy",default="reference",choices=["reference"]); replay.add_argument("--seed",type=int,default=0); replay.add_argument("--report",type=Path)
@@ -157,6 +158,15 @@ def main() -> None:
             from feline.research.engine import run_experiment
             result=run_experiment(args.paths[0],config,args.output_root or Path("data/reports/research"),args.fail_fast);result={"experiment":result["experiment"],"aggregate":result["aggregate"],"output_directory":result["output_directory"]}
         print(json.dumps(result,indent=2,default=str));return
+    if args.command=="validation":
+        from feline.research.realtime_validation import compare_validation_sessions,load_validation_summary
+        if args.action=="inspect":
+            if len(args.paths)!=1:raise SystemExit("validation inspect requires one summary path")
+            result=load_validation_summary(args.paths[0])
+        else:
+            if len(args.paths)<2:raise SystemExit("validation compare requires at least two summary paths")
+            result=compare_validation_sessions(args.paths,args.output)
+        print(json.dumps(result,indent=2,default=str));return
     if args.command=="realtime":
         from dataclasses import replace
         from feline.market.datafeed import HTTPPolicy,RetryingHTTPClient
@@ -165,11 +175,16 @@ def main() -> None:
         instruments=tuple(x.replace("/","").upper() for x in (args.instrument or ["EURUSD"]));
         try:provider=OandaV20Provider(environment=args.environment,client=RetryingHTTPClient(HTTPPolicy(timeout_seconds=30,retries=4,minimum_interval_seconds=.1)))
         except ValueError as exc:raise SystemExit(str(exc)) from None
-        ingestion=RealtimeIngestionProvider(provider,RealtimeSessionConfig(instruments=instruments));runtime=FelineRuntime(replace(config,ai=replace(config.ai,decision_mode="confirm_or_veto" if config.ai.enabled else "advisory")),provider=ingestion,recover=True)
+        ingestion=RealtimeIngestionProvider(provider,RealtimeSessionConfig(instruments=instruments));validation_mode=args.validation_mode
+        if validation_mode in {"advisory","confirm_or_veto"} and not config.ai.enabled:raise SystemExit(f"AI must be enabled for {validation_mode} validation")
+        ai_config=replace(config.ai,enabled=False,decision_mode="advisory") if validation_mode=="deterministic" else replace(config.ai,decision_mode="record") if validation_mode=="advisory" else replace(config.ai,decision_mode="confirm_or_veto" if config.ai.enabled else "advisory")
+        runtime=FelineRuntime(replace(config,ai=ai_config),provider=ingestion,recover=not bool(validation_mode),validation_mode=validation_mode,validation_output_root=args.validation_output)
         async def realtime_run():
             try:await runtime.run(args.duration)
             finally:await runtime.stop();runtime.database.close()
-        print(json.dumps({"mode":"realtime_paper","provider":"oanda_v20","instruments":instruments,"session_id":ingestion.session_id,"live_orders":False},indent=2));asyncio.run(realtime_run());return
+        print(json.dumps({"mode":"realtime_paper","validation_mode":validation_mode,"provider":"oanda_v20","instruments":instruments,"session_id":ingestion.session_id,"live_orders":False},indent=2));asyncio.run(realtime_run());
+        if runtime.validation_summary:print(json.dumps({"validation_status":runtime.validation_summary["validation_status"],"output":str(runtime.validation_output_directory),"warnings":runtime.validation_summary["warnings"]},indent=2))
+        return
     if stop_file.exists():
         raise SystemExit("Emergency stop is active (data/EMERGENCY_STOP).")
     if args.command=="replay":
@@ -207,7 +222,7 @@ def main() -> None:
         finally:
             await runtime.stop()
             runtime.database.close()
-    print("Feline Exchange v0.14.0 starting in PAPER/RESEARCH mode (no live broker exists).")
+    print("Feline Exchange v0.15.0 starting in PAPER/RESEARCH mode (no live broker exists).")
     asyncio.run(execute())
 
 
