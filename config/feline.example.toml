@@ -63,9 +63,18 @@ event_block_new_positions = true
 
 [ai]
 enabled = true
+provider = "openai_compatible"
 base_url = "http://127.0.0.1:8081"
 model = "llmware/qwen3-4b-instruct-gguf:Q4_K_M"
 request_timeout_seconds = 30.0
+retries = 1
+temperature = 0.1
+max_tokens = 600
+minimum_confidence = 0.65
+context_max_age_seconds = 20.0
+maximum_price_move_fraction = 0.001
+# advisory preserves deterministic replay; realtime paper mode uses confirm_or_veto.
+decision_mode = "advisory"
 queue_size = 32
 
 [strategy]

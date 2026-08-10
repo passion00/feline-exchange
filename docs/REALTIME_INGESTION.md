@@ -1,5 +1,7 @@
 # Realtime paper ingestion
 
+In v0.14, realtime paper mode may asynchronously request structured AI confirmation for deterministic signals. This does not change ingestion, completed-candle, feed-health, risk, or PaperBroker authority; see [AI Integration](AI_INTEGRATION.md).
+
 Feline v0.13 uses the read-only OANDA v20 pricing stream as its primary FX
 source. This is market ingestion only: every resulting order still passes
 through the existing deterministic `RiskEngine` and `PaperBroker`; there is no

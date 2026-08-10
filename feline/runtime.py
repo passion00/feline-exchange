@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections import defaultdict,deque
+from dataclasses import dataclass,replace
+from datetime import datetime,timedelta,timezone
 from pathlib import Path
 
 from feline.config import AppConfig
@@ -20,6 +23,14 @@ from feline.storage.database import Database
 from feline.strategy.reference import ReferenceStrategy
 from feline.portfolio.allocator import PortfolioAllocator
 from feline.portfolio.trades import ExitReason,TradeLifecycle
+
+
+@dataclass(frozen=True)
+class PendingAIAssessment:
+    signal: SignalEvent
+    reference_price: float
+    context_timestamp: datetime
+    expires_at: datetime
 
 
 class FelineRuntime:
@@ -50,7 +61,8 @@ class FelineRuntime:
         self.running = False
         self.realtime_session_id=getattr(self.provider,"session_id",None);self.feed_trading_ready=not bool(self.realtime_session_id);self.feed_state="OFF"
         if self.realtime_session_id:self.provider.health_callback=self._feed_health
-        self.ai = AIWorker(config.ai, ai_client or LlamaCppClient(config.ai), self.bus.publish)
+        self.recent_candles=defaultdict(lambda:deque(maxlen=20));self.recent_signals=deque(maxlen=20);self.recent_news=deque(maxlen=20);self.pending_ai:dict[str,PendingAIAssessment]={};self.latest_ai=None
+        self.ai = AIWorker(config.ai, ai_client or LlamaCppClient(config.ai), self._handle_ai_result)
         recovered = self.database.recover_broker_state() or self.database.latest_portfolio()
         if recovered and recover: self.broker.restore(*recovered)
         self.database.save_health("database","ok",{})
@@ -67,10 +79,37 @@ class FelineRuntime:
         self.database.save_health("market_provider",event.state.lower(),{"provider":event.provider,"session":event.realtime_session_id,"last_source_timestamp":event.last_source_timestamp.isoformat() if event.last_source_timestamp else None,"last_ingestion_timestamp":event.last_ingestion_timestamp.isoformat() if event.last_ingestion_timestamp else None,"message":event.message})
         await self.bus.publish(event)
 
+    def _market_context(self,instrument:str,signal:SignalEvent|None=None)->dict:
+        quote=self.broker.get_quote(instrument);portfolio=self.broker.portfolio_state();indicator=self.indicators.get(instrument);regime=self.regimes.current.get(instrument,Regime.INSUFFICIENT_DATA)
+        return {"schema":"market-context-v1","instrument":instrument,"context_timestamp":(signal.timestamp if signal else self.last_market_timestamp or datetime.now(timezone.utc)).isoformat(),"price":{"bid":quote.bid,"ask":quote.ask,"mid":quote.mid,"spread_ratio":quote.spread_ratio} if quote else None,"candles":[{"open_time":x.open_time.isoformat(),"close_time":x.close_time.isoformat(),"open":x.open,"high":x.high,"low":x.low,"close":x.close,"timeframe":x.timeframe,"complete":x.complete} for x in self.recent_candles[instrument]],"indicators":dict(signal.indicators) if signal else {},"regime":regime.value,"volatility":indicator.volatility if indicator else None,"portfolio":{"equity":portfolio["equity"],"exposure":portfolio["exposure"],"positions":{k:{"quantity":v.quantity,"average_price":v.average_price} for k,v in self.broker.positions.items()}},"recent_signals":[{"instrument":x.instrument,"side":x.side.value,"strength":x.strength,"timestamp":x.timestamp.isoformat()} for x in self.recent_signals if x.instrument==instrument],"macro_news":[{"headline":x.headline,"source":x.source,"timestamp":x.timestamp.isoformat()} for x in self.recent_news if not x.instruments or instrument in x.instruments],"deterministic_signal":{"id":signal.id,"side":signal.side.value,"strength":signal.strength,"reason":signal.reason} if signal else None,"feed_state":self.feed_state}
+
+    def _submit_signal_assessment(self,signal:SignalEvent)->bool:
+        now=signal.timestamp;expires=now+timedelta(seconds=self.config.ai.context_max_age_seconds);context=self._market_context(signal.instrument,signal);event=NewsEvent(timestamp=now,headline="Evaluate deterministic paper signal",body="No external news; use only structured context.",source="feline_market_context",instruments=(signal.instrument,),correlation_id=signal.id);job=AnalysisJob(event,purpose="signal_assessment",signal_id=signal.id,context=context,context_timestamp=now,expires_at=expires)
+        submitted=self.ai.submit_nowait(job)
+        if submitted and self.config.ai.decision_mode=="confirm_or_veto":self.pending_ai[job.id]=PendingAIAssessment(signal,signal.price,now,expires)
+        return submitted
+
+    async def _handle_ai_result(self,result:AIAnalysisResult)->None:
+        pending=self.pending_ai.pop(result.job_id,None);decision="advisory_only";vetoed=False
+        if pending:
+            now=datetime.now(timezone.utc);quote=self.broker.get_quote(pending.signal.instrument);expected="LONG" if pending.signal.side.value=="buy" else "SHORT";reason=None
+            if not result.available:reason="unavailable"
+            elif result.confidence<self.config.ai.minimum_confidence:reason="low_confidence"
+            elif now>pending.expires_at or (result.expires_at and now>result.expires_at):reason="stale_context"
+            elif quote is None:reason="missing_quote"
+            elif abs(quote.mid/pending.reference_price-1)>self.config.ai.maximum_price_move_fraction:reason="market_moved"
+            elif result.suggested_action!=expected:reason="contradictory_or_no_trade"
+            if reason:decision=f"NO_TRADE:{reason}";vetoed=True
+            else:
+                outcome=await self._execute_signal(pending.signal)
+                decision="CONFIRMED:risk_approved" if not isinstance(outcome,RiskEvent) or outcome.approved else f"CONFIRMED:risk_rejected:{outcome.rule}"
+        result=replace(result,downstream_decision=decision,vetoed=vetoed);self.latest_ai=result;await self.bus.publish(result)
+
     async def _persist(self, event) -> None:
         if self.replay_session_id and getattr(event,"replay_session_id",None) is None:event=__import__('dataclasses').replace(event,replay_session_id=self.replay_session_id)
         self.database.persist_event(event)
-        if isinstance(event,AIAnalysisResult):self.database.save_health("ai","available" if event.available else "unavailable",{"queue_depth":self.ai.queue.qsize(),"error":event.error})
+        if isinstance(event,AIAnalysisResult):
+            self.database.save_health("ai","available" if event.available else "unavailable",{"provider":event.provider,"model":event.model_version or event.model_identifier,"queue_depth":self.ai.queue.qsize(),"latency_ms":event.latency_ms,"suggested_action":event.suggested_action,"confidence":event.confidence,"downstream_decision":event.downstream_decision,"vetoed":event.vetoed,"error":event.error})
 
     async def handle_tick(self, tick: PriceTick, build_candles: bool = True) -> None:
         build_candles = build_candles and not tick.source.endswith(":synthetic_execution")
@@ -99,13 +138,13 @@ class FelineRuntime:
         self.broker.extreme_volatility=regime is Regime.EXTREME_VOLATILITY
         for candle in self.candles.update(tick) if build_candles else ():
             await self.bus.publish(candle)
+            self.recent_candles[candle.instrument].append(candle)
             signal=self.strategy.on_candle(candle,regime)
             if signal and self.config.strategy.enabled:
-                await self.bus.publish(signal)
-                portfolio=self.broker.portfolio_state(); quantity,stop,target=self.strategy.order_from_signal(signal,portfolio["equity"])
-                allocated=self.allocator.allocate(signal,portfolio["equity"],portfolio["cash"],portfolio["exposure"]);quantity=min(quantity,allocated)
-                order=OrderRequest(instrument=signal.instrument,side=signal.side,quantity=quantity,expected_price=signal.price,stop_price=stop,take_profit_price=target,signal_id=signal.id,correlation_id=signal.id,timestamp=signal.timestamp,replay_session_id=self.replay_session_id)
-                await self.request_order(order)
+                self.recent_signals.append(signal);await self.bus.publish(signal);submitted=self._submit_signal_assessment(signal) if self.config.ai.enabled and self.config.ai.decision_mode in {"confirm_or_veto","record"} else False
+                if self.config.ai.decision_mode!="confirm_or_veto":await self._execute_signal(signal)
+                elif not submitted:
+                    unavailable=AIAnalysisResult(job_id="queue-rejected:"+signal.id,instrument=signal.instrument,event_type="market_signal",direction="neutral",importance=0,confidence=0,time_horizon="none",summary="AI queue unavailable",reasoning_summary="Fail-safe NO_TRADE",evidence=(),available=False,error="QueueUnavailable",suggested_action="NO_TRADE",affected_signal_id=signal.id,downstream_decision="NO_TRADE:queue_unavailable",vetoed=True);self.latest_ai=unavailable;await self.bus.publish(unavailable)
         self.tick_count+=1
         portfolio=self.broker.portfolio_state(); self.peak_equity=max(self.peak_equity,portfolio["equity"]); self.equity_history.append(portfolio["equity"])
         if portfolio["exposure"]>0:self.exposure_samples+=1
@@ -114,6 +153,9 @@ class FelineRuntime:
         self.database.save_health("market_provider","healthy" if tick.realtime_session_id else "connected",{"last_tick":tick.timestamp.isoformat(),"ingestion_timestamp":tick.ingestion_timestamp.isoformat() if tick.ingestion_timestamp else None,"source":tick.source,"realtime_session_id":tick.realtime_session_id})
         self.database.save_health("risk","kill_switch" if self.risk.kill_switch else "ok",{"danger_mode":self.risk.danger.active(tick.timestamp)})
         await self.bus.publish(tick)
+
+    async def _execute_signal(self,signal:SignalEvent):
+        portfolio=self.broker.portfolio_state();quantity,stop,target=self.strategy.order_from_signal(signal,portfolio["equity"]);allocated=self.allocator.allocate(signal,portfolio["equity"],portfolio["cash"],portfolio["exposure"]);quantity=min(quantity,allocated);order=OrderRequest(instrument=signal.instrument,side=signal.side,quantity=quantity,expected_price=signal.price,stop_price=stop,take_profit_price=target,signal_id=signal.id,correlation_id=signal.id,timestamp=signal.timestamp,replay_session_id=self.replay_session_id);return await self.request_order(order)
 
     async def request_order(self, order: OrderRequest):
         if self.realtime_session_id and not self.feed_trading_ready:
@@ -140,7 +182,7 @@ class FelineRuntime:
         if normalized is None:return False
         self.database.persist_event(normalized.event)
         self.database.save_health("news_provider","connected",{"last_news":event.timestamp.isoformat()})
-        return self.ai.submit_nowait(AnalysisJob(normalized.event,priority=normalized.priority))
+        self.recent_news.append(normalized.event);instrument=normalized.event.instruments[0] if normalized.event.instruments else "UNKNOWN";context=self._market_context(instrument) if instrument!="UNKNOWN" else {"schema":"market-context-v1","instrument":"UNKNOWN","news_only":True};return self.ai.submit_nowait(AnalysisJob(normalized.event,priority=normalized.priority,context=context,purpose="news_assessment",context_timestamp=self.last_market_timestamp or datetime.now(timezone.utc),expires_at=datetime.now(timezone.utc)+timedelta(seconds=self.config.ai.context_max_age_seconds)))
 
     def schedule_economic_event(self,event:EconomicEvent)->None:
         self.risk.danger.schedule(event); self.database.persist_event(event);self.database.save_health("economic_calendar","connected",{"last_event":event.name})

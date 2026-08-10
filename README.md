@@ -1,6 +1,8 @@
-# Feline Exchange v0.13.0 — Realtime Market Ingestion
+# Feline Exchange v0.14.0 — AI Integration
 
-Feline Exchange is a local-first observer, deterministic execution/replay simulator, and market research platform. Version 0.13 connects OANDA v20 streaming quotes to the authoritative event, completed-candle, indicator, regime, strategy, deterministic risk, persistence, and paper-execution path. Feed degradation blocks new orders and is visible in CLI/GUI health. See [Realtime paper ingestion](docs/REALTIME_INGESTION.md). It remains paper/research only; no live-order path exists.
+Feline Exchange is a local-first observer, deterministic execution/replay simulator, and market research platform. Version 0.14 adds bounded asynchronous AI assessments to realtime paper mode. The model may confirm or veto an existing deterministic signal, but it cannot originate orders or bypass feed health, RiskEngine, PaperBroker, stops, exposure, or the kill switch. See [AI Integration](docs/AI_INTEGRATION.md) and [Realtime paper ingestion](docs/REALTIME_INGESTION.md). No live-order path exists.
+
+AI configuration is provider-neutral at the trading layer. The included practical backend speaks the OpenAI-compatible chat-completions protocol (including local `llama.cpp`); invalid, stale, low-confidence, unavailable, or contradictory assessments fail closed without blocking market ingestion.
 
 Continuous multi-market examples:
 

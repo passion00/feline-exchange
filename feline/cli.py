@@ -165,7 +165,7 @@ def main() -> None:
         instruments=tuple(x.replace("/","").upper() for x in (args.instrument or ["EURUSD"]));
         try:provider=OandaV20Provider(environment=args.environment,client=RetryingHTTPClient(HTTPPolicy(timeout_seconds=30,retries=4,minimum_interval_seconds=.1)))
         except ValueError as exc:raise SystemExit(str(exc)) from None
-        ingestion=RealtimeIngestionProvider(provider,RealtimeSessionConfig(instruments=instruments));runtime=FelineRuntime(replace(config,ai=replace(config.ai,enabled=False)),provider=ingestion,recover=True)
+        ingestion=RealtimeIngestionProvider(provider,RealtimeSessionConfig(instruments=instruments));runtime=FelineRuntime(replace(config,ai=replace(config.ai,decision_mode="confirm_or_veto" if config.ai.enabled else "advisory")),provider=ingestion,recover=True)
         async def realtime_run():
             try:await runtime.run(args.duration)
             finally:await runtime.stop();runtime.database.close()
@@ -207,7 +207,7 @@ def main() -> None:
         finally:
             await runtime.stop()
             runtime.database.close()
-    print("Feline Exchange v0.13.0 starting in PAPER/RESEARCH mode (no live broker exists).")
+    print("Feline Exchange v0.14.0 starting in PAPER/RESEARCH mode (no live broker exists).")
     asyncio.run(execute())
 
 

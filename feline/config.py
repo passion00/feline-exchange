@@ -44,10 +44,30 @@ class PaperConfig:
 @dataclass(frozen=True)
 class AIConfig:
     enabled: bool = True
+    provider: str = "openai_compatible"
     base_url: str = "http://127.0.0.1:8081"
     model: str = "llmware/qwen3-4b-instruct-gguf:Q4_K_M"
     request_timeout_seconds: float = 30.0
+    retries: int = 1
+    temperature: float = 0.1
+    max_tokens: int = 600
+    minimum_confidence: float = 0.65
+    context_max_age_seconds: float = 20.0
+    maximum_price_move_fraction: float = 0.001
+    decision_mode: str = "advisory"
     queue_size: int = 32
+
+    def __post_init__(self) -> None:
+        if self.provider not in {"openai_compatible", "llama_cpp"}:
+            raise ValueError("unsupported AI provider")
+        if self.decision_mode not in {"advisory", "record", "confirm_or_veto"}:
+            raise ValueError("invalid AI decision_mode")
+        if not 0 <= self.temperature <= 2 or not 0 <= self.minimum_confidence <= 1:
+            raise ValueError("invalid AI temperature/confidence")
+        if self.request_timeout_seconds <= 0 or self.retries < 0 or self.max_tokens < 1 or self.queue_size < 1:
+            raise ValueError("invalid AI resource bounds")
+        if self.context_max_age_seconds <= 0 or self.maximum_price_move_fraction < 0:
+            raise ValueError("invalid AI freshness bounds")
 
 
 @dataclass(frozen=True)
