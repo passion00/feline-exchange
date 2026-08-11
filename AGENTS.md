@@ -1,5 +1,7 @@
 # Feline Exchange Engineering Invariants
 
+v0.17.2 experiment invariant: offline news-intelligence experiments use isolated state and the production news/thesis/confirmation/risk path. Semantic quality is descriptive; safety is strict. No offline experiment can construct an external execution adapter.
+
 v0.16 data invariant: adapters preserve provider symbol, price basis,
 timestamps, checksums, and gaps. BTCUSDT is distinct from BTCUSD. Quality
 validation never clamps OHLC or synthesizes missing candles, and a REJECTED

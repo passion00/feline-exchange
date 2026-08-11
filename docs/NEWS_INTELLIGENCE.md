@@ -1,5 +1,7 @@
 # News-driven market intelligence
 
+Automated evaluation is documented in [News Intelligence Experiments](EXPERIMENTS.md). Benchmark expectations are never sent to the AI, and fixture/local/external modes all enter the production normalization, validation, thesis, focus, confirmation, and risk path.
+
 Feline v0.17 implements:
 
 ```text

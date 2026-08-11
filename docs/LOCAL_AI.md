@@ -1,5 +1,7 @@
 # Portable local AI
 
+Evaluate an installed managed-local model without changing trading configuration using `python3 -m feline experiment news-intelligence --suite smoke --ai local --start-ai`. It never downloads assets implicitly or contacts an external broker. See [Experiments](EXPERIMENTS.md).
+
 Feline v0.17.1 owns the optional local AI installation location and process lifecycle. Missing AI assets never prevent replay, market ingestion, deterministic risk, PaperBroker, broker monitoring, or news ingestion from running.
 
 ## Layout and first run

@@ -1,6 +1,8 @@
-# Feline Exchange v0.17.1 — Portable Local AI Bootstrap
+# Feline Exchange v0.17.2 — Automated News-Intelligence Experiments
 
-Feline Exchange is a local-first observer, deterministic execution/replay simulator, and market research platform. Version 0.17.1 makes the optional local AI runtime portable: Feline owns a pinned repository-local llama.cpp installation, verified/resumable model downloads, model selection, hardware guidance, and safe process lifecycle. The v0.17 intelligence path remains **news/economic event → bounded AI market thesis → dynamic market focus → deterministic completed-candle confirmation → RiskEngine → selected broker**. See [Local AI](docs/LOCAL_AI.md), [News Intelligence](docs/NEWS_INTELLIGENCE.md), and [AI Integration](docs/AI_INTEGRATION.md).
+Feline Exchange is a local-first observer, deterministic execution/replay simulator, and market research platform. Version 0.17.2 adds an isolated reusable harness that measures the production **news/economic event → bounded AI market thesis → dynamic market focus → deterministic completed-candle confirmation → RiskEngine** path. Engineering safety is strict PASS/FAIL; AI semantics are measured separately. Portable local AI and external endpoints remain supported. See [Experiments](docs/EXPERIMENTS.md), [Local AI](docs/LOCAL_AI.md), [News Intelligence](docs/NEWS_INTELLIGENCE.md), and [AI Integration](docs/AI_INTEGRATION.md).
+
+Run the deterministic benchmark without a model or network: `python3 -m feline experiment news-intelligence --suite standard --ai fixture`.
 
 AI configuration is provider-neutral at the trading layer. The included practical backend speaks the OpenAI-compatible chat-completions protocol (including local `llama.cpp`); invalid, stale, low-confidence, unavailable, or contradictory assessments fail closed without blocking market ingestion.
 

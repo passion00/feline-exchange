@@ -29,7 +29,7 @@ def parser() -> argparse.ArgumentParser:
     subs.add_parser("stop", help="activate the persistent emergency-stop marker")
     replay=subs.add_parser("replay")
     replay.add_argument("csv",type=Path); replay.add_argument("--speed",default="max"); replay.add_argument("--strategy",default="reference",choices=["reference"]); replay.add_argument("--seed",type=int,default=0); replay.add_argument("--report",type=Path)
-    experiment=subs.add_parser("experiment");experiment.add_argument("dataset",type=Path);experiment.add_argument("--grid",type=Path,required=True);experiment.add_argument("--max-runs",type=int,default=16)
+    experiment=subs.add_parser("experiment",help="parameter-grid or isolated news-intelligence experiments");experiment.add_argument("dataset",type=Path,nargs="?");experiment.add_argument("experiment_paths",type=Path,nargs="*");experiment.add_argument("--grid",type=Path);experiment.add_argument("--max-runs",type=int,default=16);experiment.add_argument("--suite",choices=["standard","smoke","safety"],default="standard");experiment.add_argument("--ai",dest="experiment_ai",choices=["fixture","local","external"],default="fixture");experiment.add_argument("--case");experiment.add_argument("--category");experiment.add_argument("--limit",type=int);experiment.add_argument("--seed",dest="experiment_seed",type=int,default=17);experiment.add_argument("--start-ai",action="store_true");experiment.add_argument("--report",dest="experiment_report",type=Path);experiment.add_argument("--format",dest="experiment_format",choices=["json","markdown","both"],default="both");experiment.add_argument("--resume",type=Path);experiment.add_argument("--no-price-scenarios",action="store_true");experiment.add_argument("--fail-on-safety-error",action="store_true")
     walk=subs.add_parser("walk-forward");walk.add_argument("dataset",type=Path);walk.add_argument("--train",type=int,required=True);walk.add_argument("--test",type=int,required=True)
     subs.add_parser("doctor")
     subs.add_parser("gui")
@@ -114,6 +114,18 @@ def main() -> None:
         async def inject():
             runtime.ai.start();accepted=runtime.submit_news(NewsEvent(timestamp=datetime.now(timezone.utc),headline=args.headline,body=args.body,source=args.source,instruments=tuple(args.instrument),ingestion_timestamp=datetime.now(timezone.utc)));await runtime.ai.queue.join();await runtime.bus.drain();result=runtime.latest_thesis.payload() if runtime.latest_thesis else runtime.latest_ai.payload() if runtime.latest_ai else {"available":False,"error":"AI disabled or queue rejected"};await runtime.stop();runtime.database.close();return {"accepted":accepted,"result":result}
         print(json.dumps(asyncio.run(inject()),indent=2,default=str));return
+    if args.command=="experiment" and args.dataset and str(args.dataset) in {"news-intelligence","compare"}:
+        try:
+            if str(args.dataset)=="compare":
+                from feline.experiments import compare_reports
+                paths=args.experiment_paths;result=compare_reports(paths,args.experiment_report)
+            else:
+                from feline.experiments import run_news_intelligence
+                result=run_news_intelligence(config,suite=args.suite,ai_mode=args.experiment_ai,case_id=args.case,category=args.category,limit=args.limit,seed=args.experiment_seed,report_path=args.experiment_report,formats=args.experiment_format,include_price=not args.no_price_scenarios,start_ai=args.start_ai,resume=args.resume)
+                if args.fail_on_safety_error and result["summary"]["engineering"]["safety_failures"]:raise SystemExit(3)
+        except (ValueError,OSError,RuntimeError) as exc:
+            print(f"Experiment: {exc}",file=__import__('sys').stderr);raise SystemExit(2) from None
+        print(json.dumps({"metadata":result.get("metadata"),"summary":result.get("summary"),"outputs":result.get("outputs"),"reports":result.get("reports")},indent=2,default=str));return
     if args.command=="gui":
         from feline.gui.app import run_gui
         run_gui();return
@@ -245,6 +257,7 @@ def main() -> None:
         from feline.storage.database import Database
         db=Database(Path(config.database_path))
         if args.command=="experiment":
+            if not args.dataset or not args.grid:raise SystemExit("parameter-grid experiment requires DATASET --grid GRID.toml; use 'experiment news-intelligence' for news benchmarks")
             grid=tomllib.loads(args.grid.read_text()).get("grid",{});results=[]
             for parameters in parameter_grid(grid,args.max_runs):
                 exp=create_experiment("reference",str(args.dataset),parameters);db.save_experiment(exp,"running")
@@ -270,7 +283,7 @@ def main() -> None:
         finally:
             await runtime.stop()
             runtime.database.close()
-    print("Feline Exchange v0.17.1 starting in PAPER/RESEARCH mode.")
+    print("Feline Exchange v0.17.2 starting in PAPER/RESEARCH mode.")
     asyncio.run(execute())
 
 
