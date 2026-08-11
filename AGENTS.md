@@ -1,5 +1,7 @@
 # Feline Exchange Engineering Invariants
 
+v0.17.3 timing invariant: news-thesis inference has a purpose-specific five-minute default. Model latency is not signal freshness, news expiry, thesis expiry, or stale-entry distance; those remain separate controls.
+
 v0.17.2 experiment invariant: offline news-intelligence experiments use isolated state and the production news/thesis/confirmation/risk path. Semantic quality is descriptive; safety is strict. No offline experiment can construct an external execution adapter.
 
 v0.16 data invariant: adapters preserve provider symbol, price basis,

@@ -6,6 +6,12 @@ Feline v0.17.1 added a portable managed-local mode. Feline can explicitly instal
 
 Feline v0.17.2 adds fixture, managed-local, and external-provider benchmarks over that same production path. Safety invariants and semantic usefulness are deliberately reported separately; see [Experiments](EXPERIMENTS.md).
 
+## Purpose-specific deadlines
+
+Feline v0.17.3 separates AI transport deadlines by job purpose. `analyze_news_for_market_impact` defaults to `news_thesis_timeout_seconds = 300`, intentionally allowing Qwen3 4B CPU inference up to five minutes. A locked deterministic signal remains short-lived and uses `trading_assessment_timeout_seconds = 30`. `request_timeout_seconds` remains the backward-compatible deadline for uncategorized/legacy jobs. Purpose-specific settings take precedence for their respective jobs, and the same selected deadline bounds both HTTP transport and the worker's total retry window.
+
+The 20-second `context_max_age_seconds` and `maximum_price_move_fraction` apply only to old confirm/veto assessment of an already-existing signal. They never reject a news thesis merely because inference took longer. Feline is not an HFT system.
+
 Feline v0.14 introduced a bounded reasoning layer; it does not add a trading authority. Feline v0.15 adds session-level measurement described in [Live Paper Validation](LIVE_PAPER_VALIDATION.md). The OpenAI-compatible provider can point at a local `llama.cpp` server or another compatible endpoint by configuration. No model credentials are included in prompts, events, logs, or the database.
 
 ## Decision contract

@@ -2,6 +2,8 @@
 
 Evaluate an installed managed-local model without changing trading configuration using `python3 -m feline experiment news-intelligence --suite smoke --ai local --start-ai`. It never downloads assets implicitly or contacts an external broker. See [Experiments](EXPERIMENTS.md).
 
+News analysis defaults to a 300-second deadline because structured Qwen3 4B inference can exceed 30 seconds on a CPU. This is normal busy work, not an offline state. The GUI shows the active headline and elapsed time while analyzing. The pinned llama.cpp b9637 runtime advertises `--reasoning off`; managed startup uses that actual thinking-disable control when `reasoning_mode = "disabled"`, falling back to `--reasoning-budget 0` where supported and otherwise warning without passing an unknown flag.
+
 Feline v0.17.1 owns the optional local AI installation location and process lifecycle. Missing AI assets never prevent replay, market ingestion, deterministic risk, PaperBroker, broker monitoring, or news ingestion from running.
 
 ## Layout and first run

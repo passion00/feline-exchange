@@ -29,7 +29,7 @@ def parser() -> argparse.ArgumentParser:
     subs.add_parser("stop", help="activate the persistent emergency-stop marker")
     replay=subs.add_parser("replay")
     replay.add_argument("csv",type=Path); replay.add_argument("--speed",default="max"); replay.add_argument("--strategy",default="reference",choices=["reference"]); replay.add_argument("--seed",type=int,default=0); replay.add_argument("--report",type=Path)
-    experiment=subs.add_parser("experiment",help="parameter-grid or isolated news-intelligence experiments");experiment.add_argument("dataset",type=Path,nargs="?");experiment.add_argument("experiment_paths",type=Path,nargs="*");experiment.add_argument("--grid",type=Path);experiment.add_argument("--max-runs",type=int,default=16);experiment.add_argument("--suite",choices=["standard","smoke","safety"],default="standard");experiment.add_argument("--ai",dest="experiment_ai",choices=["fixture","local","external"],default="fixture");experiment.add_argument("--case");experiment.add_argument("--category");experiment.add_argument("--limit",type=int);experiment.add_argument("--seed",dest="experiment_seed",type=int,default=17);experiment.add_argument("--start-ai",action="store_true");experiment.add_argument("--report",dest="experiment_report",type=Path);experiment.add_argument("--format",dest="experiment_format",choices=["json","markdown","both"],default="both");experiment.add_argument("--resume",type=Path);experiment.add_argument("--no-price-scenarios",action="store_true");experiment.add_argument("--fail-on-safety-error",action="store_true")
+    experiment=subs.add_parser("experiment",help="parameter-grid or isolated news-intelligence experiments");experiment.add_argument("dataset",type=Path,nargs="?");experiment.add_argument("experiment_paths",type=Path,nargs="*");experiment.add_argument("--grid",type=Path);experiment.add_argument("--max-runs",type=int,default=16);experiment.add_argument("--suite",choices=["standard","smoke","safety"],default="standard");experiment.add_argument("--ai",dest="experiment_ai",choices=["fixture","local","external"],default="fixture");experiment.add_argument("--ai-timeout",type=float,help="explicit news-thesis deadline override in seconds");experiment.add_argument("--case");experiment.add_argument("--category");experiment.add_argument("--limit",type=int);experiment.add_argument("--seed",dest="experiment_seed",type=int,default=17);experiment.add_argument("--start-ai",action="store_true");experiment.add_argument("--report",dest="experiment_report",type=Path);experiment.add_argument("--format",dest="experiment_format",choices=["json","markdown","both"],default="both");experiment.add_argument("--resume",type=Path);experiment.add_argument("--no-price-scenarios",action="store_true");experiment.add_argument("--fail-on-safety-error",action="store_true")
     walk=subs.add_parser("walk-forward");walk.add_argument("dataset",type=Path);walk.add_argument("--train",type=int,required=True);walk.add_argument("--test",type=int,required=True)
     subs.add_parser("doctor")
     subs.add_parser("gui")
@@ -121,7 +121,7 @@ def main() -> None:
                 paths=args.experiment_paths;result=compare_reports(paths,args.experiment_report)
             else:
                 from feline.experiments import run_news_intelligence
-                result=run_news_intelligence(config,suite=args.suite,ai_mode=args.experiment_ai,case_id=args.case,category=args.category,limit=args.limit,seed=args.experiment_seed,report_path=args.experiment_report,formats=args.experiment_format,include_price=not args.no_price_scenarios,start_ai=args.start_ai,resume=args.resume)
+                result=run_news_intelligence(config,suite=args.suite,ai_mode=args.experiment_ai,case_id=args.case,category=args.category,limit=args.limit,seed=args.experiment_seed,report_path=args.experiment_report,formats=args.experiment_format,include_price=not args.no_price_scenarios,start_ai=args.start_ai,resume=args.resume,ai_timeout=args.ai_timeout)
                 if args.fail_on_safety_error and result["summary"]["engineering"]["safety_failures"]:raise SystemExit(3)
         except (ValueError,OSError,RuntimeError) as exc:
             print(f"Experiment: {exc}",file=__import__('sys').stderr);raise SystemExit(2) from None
@@ -283,7 +283,7 @@ def main() -> None:
         finally:
             await runtime.stop()
             runtime.database.close()
-    print("Feline Exchange v0.17.2 starting in PAPER/RESEARCH mode.")
+    print("Feline Exchange v0.17.3 starting in PAPER/RESEARCH mode.")
     asyncio.run(execute())
 
 

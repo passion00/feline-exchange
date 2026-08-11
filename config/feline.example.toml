@@ -69,11 +69,20 @@ provider = "managed_local"
 base_url = "http://127.0.0.1:8081"
 model = "feline/qwen3-4b-q4km"
 # model_id = "qwen3-4b-q4km" # optional config lock; otherwise ignored user preference/default applies
+# Legacy/default deadline for uncategorized AI jobs.
 request_timeout_seconds = 30.0
+# An already-existing deterministic signal is short-lived.
+trading_assessment_timeout_seconds = 30.0
+# News interpretation on local CPU hardware is intentionally allowed up to
+# five minutes. Model latency is not news expiry.
+news_thesis_timeout_seconds = 300.0
 retries = 1
 temperature = 0.1
 max_tokens = 600
 minimum_confidence = 0.65
+# These two limits apply only to locked deterministic signal assessment, not
+# to MarketThesis creation. Thesis expiry and confirmation entry-staleness are
+# configured separately below.
 context_max_age_seconds = 20.0
 maximum_price_move_fraction = 0.001
 # advisory/record/confirm_or_veto remain compatible; news_thesis enables NEWS -> THESIS -> PRICE confirmation.

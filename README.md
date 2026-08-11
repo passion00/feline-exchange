@@ -1,6 +1,6 @@
-# Feline Exchange v0.17.2 — Automated News-Intelligence Experiments
+# Feline Exchange v0.17.3 — Correct News-Intelligence Timing
 
-Feline Exchange is a local-first observer, deterministic execution/replay simulator, and market research platform. Version 0.17.2 adds an isolated reusable harness that measures the production **news/economic event → bounded AI market thesis → dynamic market focus → deterministic completed-candle confirmation → RiskEngine** path. Engineering safety is strict PASS/FAIL; AI semantics are measured separately. Portable local AI and external endpoints remain supported. See [Experiments](docs/EXPERIMENTS.md), [Local AI](docs/LOCAL_AI.md), [News Intelligence](docs/NEWS_INTELLIGENCE.md), and [AI Integration](docs/AI_INTEGRATION.md).
+Feline Exchange is a local-first observer, deterministic execution/replay simulator, and market research platform. Version 0.17.3 gives CPU-based news-thesis inference an intentional five-minute deadline while preserving the shorter deterministic signal-review window. Model latency is not news expiry, and thesis validity is separate from stale-entry protection. The production path remains **news/economic event → bounded AI market thesis → dynamic market focus → deterministic completed-candle confirmation → RiskEngine**. See [Experiments](docs/EXPERIMENTS.md), [Local AI](docs/LOCAL_AI.md), [News Intelligence](docs/NEWS_INTELLIGENCE.md), and [AI Integration](docs/AI_INTEGRATION.md).
 
 Run the deterministic benchmark without a model or network: `python3 -m feline experiment news-intelligence --suite standard --ai fixture`.
 

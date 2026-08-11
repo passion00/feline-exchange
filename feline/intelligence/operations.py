@@ -88,10 +88,12 @@ class LocalAIProcessManager:
             argv += ["--n-gpu-layers", str(config.gpu_layers)]
         warnings = []
         if config.reasoning_mode == "disabled":
-            if self.runtime_supports(executable, "--reasoning-format"):
-                argv += ["--reasoning-format", "none"]
+            if self.runtime_supports(executable, "--reasoning"):
+                argv += ["--reasoning", "off"]
+            elif self.runtime_supports(executable, "--reasoning-budget"):
+                argv += ["--reasoning-budget", "0"]
             else:
-                warnings.append("Installed runtime does not advertise --reasoning-format; starting without that option.")
+                warnings.append("Installed runtime does not advertise a reasoning-disable option; starting without one.")
         return argv, warnings
 
     def start(self, config) -> dict:

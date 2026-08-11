@@ -109,9 +109,13 @@ class FelineRuntime:
 
     async def _handle_ai_result(self,result)->None:
         if isinstance(result,MarketThesis):
-            if result.confidence<self.config.thesis.minimum_confidence or not any(x.confidence>=self.config.thesis.minimum_confidence and x.relevance>=self.config.thesis.minimum_relevance for x in result.affected_assets):result=replace(result,state=ThesisState.REJECTED)
+            completion=result.created_at+timedelta(milliseconds=result.latency_ms or 0)
+            if completion>result.expires_at:result=replace(result,state=ThesisState.EXPIRED)
+            elif result.confidence<self.config.thesis.minimum_confidence or not any(x.confidence>=self.config.thesis.minimum_confidence and x.relevance>=self.config.thesis.minimum_relevance for x in result.affected_assets):result=replace(result,state=ThesisState.REJECTED)
             self.latest_thesis=result;await self.bus.publish(result)
-            if result.state is not ThesisState.REJECTED:
+            if result.state is ThesisState.EXPIRED:
+                for asset in result.affected_assets:await self.bus.publish(ThesisStateEvent(timestamp=completion,thesis_id=result.thesis_id,instrument=asset.instrument,previous=ThesisState.CREATED,current=ThesisState.EXPIRED,confirmation_state="EXPIRED",reason="analysis completed after thesis horizon",correlation_id=result.thesis_id))
+            elif result.state is not ThesisState.REJECTED:
                 for lifecycle in self.focus.expire(result.created_at):await self.bus.publish(lifecycle)
                 entries=self.focus.accept(result,self.broker.quotes);request_focus=getattr(self.provider,"request_focus",None)
                 if request_focus:request_focus((x.instrument for x in entries if x.state is ThesisState.WATCHING),self.config.thesis.maximum_focused_instruments)
@@ -139,7 +143,8 @@ class FelineRuntime:
         if self.replay_session_id and getattr(event,"replay_session_id",None) is None:event=__import__('dataclasses').replace(event,replay_session_id=self.replay_session_id)
         self.database.persist_event(event)
         if isinstance(event,AIAnalysisResult):
-            self.database.save_health("ai","available" if event.available else "unavailable",{"provider":event.provider,"model":event.model_version or event.model_identifier,"queue_depth":self.ai.queue.qsize(),"latency_ms":event.latency_ms,"suggested_action":event.suggested_action,"confidence":event.confidence,"downstream_decision":event.downstream_decision,"vetoed":event.vetoed,"error":event.error})
+            state="available" if event.available else "timeout" if event.error in {"TimeoutError","Timeout"} else "unavailable"
+            self.database.save_health("ai",state,{"provider":event.provider,"model":event.model_version or event.model_identifier,"queue_depth":self.ai.queue.qsize(),"latency_ms":event.latency_ms,"suggested_action":event.suggested_action,"confidence":event.confidence,"downstream_decision":event.downstream_decision,"vetoed":event.vetoed,"error":event.error})
         elif isinstance(event,MarketThesis):self.database.save_health("ai","available",{"provider":event.provider,"model":event.model_identifier,"queue_depth":self.ai.queue.qsize(),"latency_ms":event.latency_ms,"purpose":"news_thesis","confidence":event.confidence})
 
     async def handle_tick(self, tick: PriceTick, build_candles: bool = True) -> None:
@@ -352,7 +357,7 @@ class FelineRuntime:
         if self.news_provider:await self.news_provider.stop()
         await self.ai.stop()
         await self.bus.drain()
-        ai_status="not_checked" if self.ai.last_available is None else "available" if self.ai.last_available else "unavailable"
+        ai_status="busy" if self.ai.busy else "not_checked" if self.ai.last_available is None else "available" if self.ai.last_available else "timeout" if self.ai.last_error in {"TimeoutError","Timeout"} else "unavailable"
         if self.ai.dropped:ai_status="pressure"
         self.database.save_health("ai",ai_status,{"queue_depth":self.ai.queue.qsize(),"dropped":self.ai.dropped})
         self.database.save_health("event_bus","ok",{"pending":len(self.bus._tasks)})

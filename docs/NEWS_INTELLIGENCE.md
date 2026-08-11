@@ -2,6 +2,8 @@
 
 Automated evaluation is documented in [News Intelligence Experiments](EXPERIMENTS.md). Benchmark expectations are never sent to the AI, and fixture/local/external modes all enter the production normalization, validation, thesis, focus, confirmation, and risk path.
 
+News-market-impact inference may intentionally take up to 300 seconds on local CPU hardware. Publication/ingestion time, expected horizon, and `MarketThesis.expires_at` determine news/thesis freshness—not model latency. If price moves during analysis, the valid thesis is still recorded and focused using the current quote. Later deterministic confirmation may reject an entry as `STALE_MOVE`; it does not erase the thesis. RiskEngine remains the final authority.
+
 Feline v0.17 implements:
 
 ```text

@@ -49,6 +49,10 @@ class AIConfig:
     model: str = "feline/qwen3-4b-q4km"
     model_id: str | None = None
     request_timeout_seconds: float = 30.0
+    # Purpose-specific deadlines. The generic value remains for legacy and
+    # uncategorized jobs; news interpretation is intentionally not HFT.
+    news_thesis_timeout_seconds: float = 300.0
+    trading_assessment_timeout_seconds: float = 30.0
     retries: int = 1
     temperature: float = 0.1
     max_tokens: int = 600
@@ -76,7 +80,7 @@ class AIConfig:
             raise ValueError("invalid AI decision_mode")
         if not 0 <= self.temperature <= 2 or not 0 <= self.minimum_confidence <= 1:
             raise ValueError("invalid AI temperature/confidence")
-        if self.request_timeout_seconds <= 0 or self.retries < 0 or self.max_tokens < 1 or self.queue_size < 1:
+        if self.request_timeout_seconds <= 0 or self.news_thesis_timeout_seconds <= 0 or self.trading_assessment_timeout_seconds <= 0 or self.retries < 0 or self.max_tokens < 1 or self.queue_size < 1:
             raise ValueError("invalid AI resource bounds")
         if self.context_max_age_seconds <= 0 or self.maximum_price_move_fraction < 0:
             raise ValueError("invalid AI freshness bounds")

@@ -176,7 +176,7 @@ class AssetDownloader:
         partial = destination.with_name(destination.name + ".part")
         for attempt in range(self.retries + 1):
             offset = partial.stat().st_size if partial.exists() else 0
-            headers = {"User-Agent": "FelineExchange/0.17.2"}
+            headers = {"User-Agent": "FelineExchange/0.17.3"}
             if offset:
                 headers["Range"] = f"bytes={offset}-"
             try:
