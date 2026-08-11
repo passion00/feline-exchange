@@ -5,7 +5,7 @@ import sqlite3
 from pathlib import Path
 from threading import Lock
 
-from feline.core.events import AIAnalysisResult, CandleUpdate, Event,FeedHealthEvent,FillEvent,FinancingEvent, NewsEvent, OrderRequest,OrderType,OrderUpdate, PortfolioSnapshot, PriceTick, RegimeEvent, RiskEvent,Side, SignalEvent
+from feline.core.events import AIAnalysisResult,CandleUpdate,Event,FeedHealthEvent,FillEvent,FinancingEvent,MarketThesis,NewsEvent,OrderRequest,OrderType,OrderUpdate,PortfolioSnapshot,PriceTick,RegimeEvent,RiskEvent,Side,SignalEvent,ThesisStateEvent
 from feline.portfolio.models import Position
 from feline.execution.models import PendingOrder
 from .migrations import MIGRATIONS
@@ -39,6 +39,11 @@ class Database:
                 self.connection.execute("INSERT OR IGNORE INTO market_events VALUES (?,?,?,?,?)", (event.id, ts, type(event).__name__, event.instrument, payload))
             elif isinstance(event, NewsEvent):
                 self.connection.execute("INSERT OR IGNORE INTO news_events VALUES (?,?,?,?,?)", (event.id, ts, event.source, event.headline, payload))
+            elif isinstance(event,MarketThesis):
+                self.connection.execute("INSERT OR IGNORE INTO market_theses VALUES(?,?,?,?,?,?,?,?,?)",(event.thesis_id,event.catalyst_event_id,event.created_at.isoformat(),event.expires_at.isoformat(),event.state.value,event.provider,event.model_identifier,event.replay_session_id,payload))
+                for asset in event.affected_assets:self.connection.execute("INSERT OR REPLACE INTO thesis_assets VALUES(?,?,?,?,?,?,?,?,?)",(event.thesis_id,asset.instrument,asset.directional_bias,asset.confidence,asset.relevance,int(asset.tradable),None if asset.shortable is None else int(asset.shortable),event.state.value,json.dumps(__import__('dataclasses').asdict(asset),sort_keys=True)))
+            elif isinstance(event,ThesisStateEvent):
+                self.connection.execute("INSERT OR IGNORE INTO thesis_lifecycle VALUES(?,?,?,?,?,?,?,?,?)",(event.id,event.thesis_id,event.instrument,ts,event.previous.value,event.current.value,event.confirmation_state,event.source_signal_id,payload));self.connection.execute("UPDATE thesis_assets SET state=? WHERE thesis_id=? AND instrument=?",(event.current.value,event.thesis_id,event.instrument))
             elif isinstance(event, AIAnalysisResult):
                 self.connection.execute("INSERT OR IGNORE INTO ai_analyses VALUES (?,?,?,?,?,?)", (event.id, event.job_id, ts, event.instrument, int(event.available), payload))
             elif isinstance(event, SignalEvent):
@@ -66,7 +71,7 @@ class Database:
             self.connection.commit()
 
     def count(self, table: str) -> int:
-        allowed = {"market_events", "news_events", "ai_analyses", "signals", "paper_orders", "paper_trades", "trades", "positions", "portfolio_snapshots", "risk_events", "system_events", "candles", "regime_events","fills","financing_charges","pending_orders","experiments","walk_forward_windows","replay_sessions","realtime_sessions","realtime_quotes","realtime_validation_summaries","broker_profiles","broker_sessions","broker_events","dataset_registry","research_experiments","research_episodes","event_results","aggregate_results","research_exclusions","research_post_shock_metrics"}
+        allowed = {"market_events", "news_events", "ai_analyses", "signals", "paper_orders", "paper_trades", "trades", "positions", "portfolio_snapshots", "risk_events", "system_events", "candles", "regime_events","fills","financing_charges","pending_orders","experiments","walk_forward_windows","replay_sessions","realtime_sessions","realtime_quotes","realtime_validation_summaries","broker_profiles","broker_sessions","broker_events","market_theses","thesis_assets","thesis_lifecycle","dataset_registry","research_experiments","research_episodes","event_results","aggregate_results","research_exclusions","research_post_shock_metrics"}
         if table not in allowed:
             raise ValueError("Invalid table")
         return int(self.connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0])

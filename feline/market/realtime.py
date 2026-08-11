@@ -27,7 +27,12 @@ class RealtimeIngestionProvider(MarketDataProvider):
                  health_callback:Callable[[FeedHealthEvent],Awaitable[None]]|None=None):
         self.source=source;self.config=config;self.session_id=session_id or str(uuid4());self.health_callback=health_callback
         self.guard=RealtimeIntegrityGuard(timedelta(seconds=config.stale_after_seconds));self.running=True;self.state=FeedState.CONNECTING;self.sequence=0
-        self.last_source_timestamp=None;self.last_ingestion_timestamp=None
+        self.last_source_timestamp=None;self.last_ingestion_timestamp=None;self._instrument_generation=0
+
+    def request_focus(self,instruments,max_instruments:int=8)->tuple[str,...]:
+        merged=tuple(dict.fromkeys((*self.config.instruments,*(str(x).replace("/","").upper() for x in instruments))))[:max_instruments]
+        if merged!=self.config.instruments:self.config=replace(self.config,instruments=merged);self._instrument_generation+=1
+        return self.config.instruments
 
     async def _health(self,state:FeedState,message:str=""):
         self.state=state
@@ -39,9 +44,13 @@ class RealtimeIngestionProvider(MarketDataProvider):
     async def stream(self):
         failures=0
         while self.running:
-            iterator=self.source.stream(self.config.instruments).__aiter__();await self._health(FeedState.CONNECTING if failures==0 else FeedState.DEGRADED,"connecting")
+            generation=self._instrument_generation;iterator=self.source.stream(self.config.instruments).__aiter__();await self._health(FeedState.CONNECTING if failures==0 else FeedState.DEGRADED,"connecting")
             try:
                 while self.running:
+                    if generation!=self._instrument_generation:
+                        close=getattr(iterator,"aclose",None)
+                        if close:await close()
+                        break
                     tick=await asyncio.wait_for(iterator.__anext__(),timeout=self.config.feed_timeout_seconds)
                     tick=self.guard.validate(tick);ingested=datetime.now(timezone.utc);self.sequence+=1
                     self.last_source_timestamp=tick.timestamp;self.last_ingestion_timestamp=ingested;failures=0

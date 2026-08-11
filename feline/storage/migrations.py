@@ -69,4 +69,10 @@ MIGRATIONS: tuple[str, ...] = (
     CREATE TABLE IF NOT EXISTS broker_events (event_id TEXT PRIMARY KEY,session_id TEXT NOT NULL,timestamp TEXT NOT NULL,kind TEXT NOT NULL,request_id TEXT,status TEXT NOT NULL,payload TEXT NOT NULL);
     CREATE INDEX IF NOT EXISTS idx_broker_events_session_time ON broker_events(session_id,timestamp);
     """,
+    """
+    CREATE TABLE IF NOT EXISTS market_theses (thesis_id TEXT PRIMARY KEY,catalyst_event_id TEXT NOT NULL,created_at TEXT NOT NULL,expires_at TEXT NOT NULL,state TEXT NOT NULL,provider TEXT,model_identifier TEXT,replay_session_id TEXT,payload TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS thesis_assets (thesis_id TEXT NOT NULL,instrument TEXT NOT NULL,bias TEXT NOT NULL,confidence REAL NOT NULL,relevance REAL NOT NULL,tradable INTEGER NOT NULL,shortable INTEGER,state TEXT NOT NULL,payload TEXT NOT NULL,PRIMARY KEY(thesis_id,instrument));
+    CREATE TABLE IF NOT EXISTS thesis_lifecycle (event_id TEXT PRIMARY KEY,thesis_id TEXT NOT NULL,instrument TEXT NOT NULL,timestamp TEXT NOT NULL,previous_state TEXT NOT NULL,current_state TEXT NOT NULL,confirmation_state TEXT NOT NULL,source_signal_id TEXT,payload TEXT NOT NULL);
+    CREATE INDEX IF NOT EXISTS idx_thesis_lifecycle_thesis_time ON thesis_lifecycle(thesis_id,timestamp);
+    """,
 )

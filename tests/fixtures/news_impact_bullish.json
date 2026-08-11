@@ -1,0 +1,20 @@
+{
+  "event_type": "geopolitical_supply_disruption",
+  "event_summary": "A reported supply disruption may affect energy-linked markets.",
+  "importance": 0.84,
+  "confidence": 0.78,
+  "expected_horizon": "4h",
+  "affected_instruments": [
+    {
+      "instrument": "EURUSD",
+      "directional_bias": "LONG",
+      "confidence": 0.76,
+      "relevance": 0.74,
+      "monitoring_priority": 0.8,
+      "rationale": "Fixture rationale used only to exercise the normalized thesis path."
+    }
+  ],
+  "reasoning_summary": "Deterministic fixture analysis for an offline end-to-end smoke test.",
+  "risk_warnings": ["Fixture output is not market advice."],
+  "invalidation_conditions": ["Price action fails to confirm before expiry."]
+}

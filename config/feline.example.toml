@@ -73,9 +73,34 @@ max_tokens = 600
 minimum_confidence = 0.65
 context_max_age_seconds = 20.0
 maximum_price_move_fraction = 0.001
-# advisory preserves deterministic replay; realtime paper mode uses confirm_or_veto.
+# advisory/record/confirm_or_veto remain compatible; news_thesis enables NEWS -> THESIS -> PRICE confirmation.
 decision_mode = "advisory"
 queue_size = 32
+local_model_path = "models/qwen3-4b-q4_k_m.gguf"
+llama_server_executable = "/path/to/llama-server"
+reasoning_mode = "disabled"
+
+[news]
+enabled = false
+provider = "rss"
+poll_interval_seconds = 60.0
+feed_urls = []
+dedup_history = 10000
+queue_size = 128
+request_timeout_seconds = 10.0
+
+[thesis]
+minimum_confidence = 0.65
+minimum_relevance = 0.5
+maximum_active_theses = 16
+maximum_focused_instruments = 8
+default_expiry_minutes = 240.0
+maximum_reference_move_fraction = 0.01
+
+[confirmation]
+strategy = "reference_signal_alignment"
+minimum_signal_strength = 0.05
+reject_opposite_signal = true
 
 [strategy]
 enabled = true

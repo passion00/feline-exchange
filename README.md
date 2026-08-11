@@ -1,6 +1,6 @@
-# Feline Exchange v0.16.0 — Broker Abstraction & GUI Broker Manager
+# Feline Exchange v0.17.0 — News-Driven Market Intelligence
 
-Feline Exchange is a local-first observer, deterministic execution/replay simulator, and market research platform. Version 0.16 adds discoverable broker adapters and a GUI Broker Manager. OANDA practice can provide quotes, account state, and demo execution through the same strategy → AI → deterministic risk pipeline; connecting never arms trading. Internal PaperBroker remains the replay/offline default. See [Broker Adapters](docs/BROKER_ADAPTERS.md), [Live Paper Validation](docs/LIVE_PAPER_VALIDATION.md), and [AI Integration](docs/AI_INTEGRATION.md).
+Feline Exchange is a local-first observer, deterministic execution/replay simulator, and market research platform. Version 0.17 adds the primary intelligence path **news/economic event → bounded AI market thesis → dynamic market focus → deterministic completed-candle confirmation → RiskEngine → selected broker**. AI can identify what deserves attention but cannot create an order. Existing advisory, record, confirm-or-veto, replay, research, PaperBroker, and v0.16 Broker Manager paths remain available. See [News Intelligence](docs/NEWS_INTELLIGENCE.md), [Broker Adapters](docs/BROKER_ADAPTERS.md), and [AI Integration](docs/AI_INTEGRATION.md).
 
 AI configuration is provider-neutral at the trading layer. The included practical backend speaks the OpenAI-compatible chat-completions protocol (including local `llama.cpp`); invalid, stale, low-confidence, unavailable, or contradictory assessments fail closed without blocking market ingestion.
 

@@ -1,5 +1,7 @@
 # AI Integration
 
+Feline v0.17 adds the dedicated `news_thesis` purpose: untrusted news is interpreted into a bounded, structured market hypothesis over Feline's supplied instrument universe. Price action—not the model—must subsequently produce deterministic confirmation. The older `advisory`, `record`, and `confirm_or_veto` modes remain compatible; they are not the only intended role of AI. See [News Intelligence](NEWS_INTELLIGENCE.md).
+
 Feline v0.14 introduced a bounded reasoning layer; it does not add a trading authority. Feline v0.15 adds session-level measurement described in [Live Paper Validation](LIVE_PAPER_VALIDATION.md). The OpenAI-compatible provider can point at a local `llama.cpp` server or another compatible endpoint by configuration. No model credentials are included in prompts, events, logs, or the database.
 
 ## Decision contract

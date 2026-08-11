@@ -13,7 +13,9 @@ data/*
 !data/.gitkeep
 *.gguf
 *.onnx
-models/
+models/*
+!models/README.md
+!models/.gitkeep
 market-data/
 *.csv
 *.parquet
@@ -23,4 +25,3 @@ secrets*
 dist/
 build/
 *.egg-info/
-

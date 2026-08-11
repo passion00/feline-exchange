@@ -33,6 +33,8 @@ def parser() -> argparse.ArgumentParser:
     walk=subs.add_parser("walk-forward");walk.add_argument("dataset",type=Path);walk.add_argument("--train",type=int,required=True);walk.add_argument("--test",type=int,required=True)
     subs.add_parser("doctor")
     subs.add_parser("gui")
+    news=subs.add_parser("news",help="news intelligence ingestion");news.add_argument("action",choices=["inject"]);news.add_argument("--headline",required=True);news.add_argument("--body",default="");news.add_argument("--source",default="manual");news.add_argument("--instrument",action="append",default=[]);news.add_argument("--response-fixture",type=Path,help="offline testing only: deterministic news-market-impact-v1 JSON response")
+    ai=subs.add_parser("ai",help="optional local llama.cpp process");ai.add_argument("action",choices=["start-local","stop-local","status"])
     data=subs.add_parser("data",help="provider-native historical research data")
     data.add_argument("action",choices=["download","quality","audit"]);data.add_argument("dataset",type=Path,nargs="?")
     data.add_argument("--provider",choices=["oanda","dukascopy","binance"]);data.add_argument("--instrument",required=True)
@@ -65,7 +67,27 @@ def main() -> None:
         return
     if args.command=="doctor":
         from feline.storage.database import Database
-        db=Database(Path(config.database_path));report=db.integrity_report();db.close();print(json.dumps(report,indent=2));raise SystemExit(0 if report["ok"] else 1)
+        from feline.intelligence.operations import ai_health
+        db=Database(Path(config.database_path));report=db.integrity_report();db.close();report["ai"]=ai_health(config.ai);report["news"]={"enabled":config.news.enabled,"provider":config.news.provider,"configured":bool(config.news.feed_urls),"feed_count":len(config.news.feed_urls)};print(json.dumps(report,indent=2));raise SystemExit(0 if report["ok"] else 1)
+    if args.command=="ai":
+        from feline.intelligence.operations import LocalAIProcessManager,ai_health
+        manager=LocalAIProcessManager();result=manager.start(config.ai) if args.action=="start-local" else manager.stop() if args.action=="stop-local" else {"process":manager.status(),"health":ai_health(config.ai)};print(json.dumps(result,indent=2));return
+    if args.command=="news":
+        from dataclasses import replace
+        from datetime import datetime,timezone
+        from feline.core.events import NewsEvent
+        fixture_client=None
+        if args.response_fixture:
+            fixture_payload=json.loads(args.response_fixture.read_text())
+            class FixtureAnalysisClient:
+                provider_name="fixture"
+                async def analyze(self,job):
+                    return fixture_payload
+            fixture_client=FixtureAnalysisClient()
+        runtime=FelineRuntime(replace(config,ai=replace(config.ai,enabled=True,decision_mode="news_thesis")),recover=False,autonomous_trading_enabled=False,ai_client=fixture_client)
+        async def inject():
+            runtime.ai.start();accepted=runtime.submit_news(NewsEvent(timestamp=datetime.now(timezone.utc),headline=args.headline,body=args.body,source=args.source,instruments=tuple(args.instrument),ingestion_timestamp=datetime.now(timezone.utc)));await runtime.ai.queue.join();await runtime.bus.drain();result=runtime.latest_thesis.payload() if runtime.latest_thesis else runtime.latest_ai.payload() if runtime.latest_ai else {"available":False,"error":"AI disabled or queue rejected"};await runtime.stop();runtime.database.close();return {"accepted":accepted,"result":result}
+        print(json.dumps(asyncio.run(inject()),indent=2,default=str));return
     if args.command=="gui":
         from feline.gui.app import run_gui
         run_gui();return
@@ -222,7 +244,7 @@ def main() -> None:
         finally:
             await runtime.stop()
             runtime.database.close()
-    print("Feline Exchange v0.16.0 starting in PAPER/RESEARCH mode.")
+    print("Feline Exchange v0.17.0 starting in PAPER/RESEARCH mode.")
     asyncio.run(execute())
 
 

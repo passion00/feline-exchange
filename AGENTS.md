@@ -32,6 +32,7 @@ dataset cannot automatically enter signal research.
 23. Secondary macro events flag or censor affected horizons but never silently replace the primary event.
 24. Announcement-, one-minute-, and stabilization-anchored research metrics remain distinct; descriptive post-shock labels never alter strategy decisions.
 25. Corpus preparation is mechanical and idempotent; experiment outcome inspection requires an explicit `--run` or read-only comparison command.
+26. News and economic-event text is untrusted evidence only. AI may originate a bounded MarketThesis, never an order; completed market data must confirm and RiskEngine remains authoritative.
 
 ## Architecture
 

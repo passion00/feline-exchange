@@ -110,6 +110,67 @@ class NewsEvent(Event):
     body: str
     source: str = "unknown"
     instruments: tuple[str, ...] = ()
+    ingestion_timestamp: datetime | None = None
+    source_url: str | None = None
+    provider_event_id: str | None = None
+
+
+class ThesisState(str,Enum):
+    CREATED="CREATED";WATCHING="WATCHING";CONFIRMED="CONFIRMED";REJECTED="REJECTED";INVALIDATED="INVALIDATED";EXPIRED="EXPIRED";RESEARCH_ONLY="RESEARCH_ONLY"
+
+
+@dataclass(frozen=True)
+class AffectedAsset:
+    instrument:str
+    directional_bias:str
+    confidence:float
+    relevance:float
+    expected_horizon:str
+    rationale:str
+    monitoring_priority:float
+    tradable:bool=False
+    shortable:bool|None=None
+    broker_status:str="unknown"
+    underlying:str|None=None
+
+
+@dataclass(frozen=True,kw_only=True)
+class MarketThesis(Event):
+    schema_version:str="market-thesis-v1"
+    thesis_id:str
+    ai_job_id:str
+    created_at:datetime
+    catalyst_event_id:str
+    catalyst_type:str
+    source:str
+    headline:str
+    event_summary:str
+    importance:float
+    confidence:float
+    expected_horizon:str
+    expires_at:datetime
+    reasoning_summary:str
+    risk_warnings:tuple[str,...]=()
+    invalidation_conditions:tuple[str,...]=()
+    provider:str="unknown"
+    model_identifier:str|None=None
+    prompt_schema_version:str="news-market-impact-v1"
+    prompt_hash:str|None=None
+    context_hash:str|None=None
+    latency_ms:float|None=None
+    affected_assets:tuple[AffectedAsset,...]=()
+    state:ThesisState=ThesisState.CREATED
+
+
+@dataclass(frozen=True,kw_only=True)
+class ThesisStateEvent(Event):
+    thesis_id:str
+    instrument:str
+    previous:ThesisState
+    current:ThesisState
+    confirmation_state:str
+    reason:str
+    source_signal_id:str|None=None
 
 
 @dataclass(frozen=True, kw_only=True)
