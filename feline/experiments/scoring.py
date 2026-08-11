@@ -9,11 +9,11 @@ from .models import ExperimentCase, SemanticScore
 def score_semantics(case: ExperimentCase, assets: Iterable[dict], validation_error: str | None = None) -> SemanticScore:
     rows = list(assets)
     expected = case.expectation
-    if validation_error and not rows:
-        return SemanticScore("unsupported" if "outside supplied universe" in validation_error else "abstained", 0.0, 0.0, 0.0, 0.0, (validation_error,))
+    if validation_error:
+        return SemanticScore("not_evaluated", 0.0, 0.0, 0.0, 0.0, (validation_error,))
     if not rows:
         if not expected.relevant:
-            return SemanticScore("strong_match", 1.0, 1.0, 1.0, 1.0, ("correctly abstained on no-impact case",))
+            return SemanticScore("abstained", 1.0, 1.0, 1.0, 1.0, ("correctly abstained on no-impact case",))
         return SemanticScore("abstained", 0.0, 0.0, 0.0, 0.0, ("no affected instrument proposed",))
     if not expected.relevant:
         return SemanticScore("mismatch", 0.0, 0.0, 0.0, 0.0, ("thesis proposed for labeled no-impact news",))
@@ -42,7 +42,7 @@ def summarize(results: list[dict]) -> dict:
     total = len(results); semantic = [x["semantic"] for x in results]; scores = [float(x["score"]) for x in semantic if x.get("score") is not None]
     relevant = [x for x in results if x["expected"]["relevant"]]; irrelevant = [x for x in results if not x["expected"]["relevant"]]
     proposed = lambda x: bool(x["ai"].get("affected_instruments"))
-    evaluated=lambda x:x["semantic"].get("evaluation_status") not in {"TIMEOUT","AI_ERROR","NOT_EVALUATED"}
+    evaluated=lambda x:x["semantic"].get("evaluation_status")=="EVALUATED" or "evaluation_status" not in x["semantic"] and x["semantic"].get("score") is not None
     latencies = [float(x["timings"]["latency_ms"]) for x in results if x["timings"].get("latency_ms") is not None]
     counts = {name: sum(x["category"] == name for x in semantic) for name in ("strong_match", "match", "partial_match", "mismatch", "abstained", "unsupported", "not_evaluated")}
     safety_failures = sum(not invariant["passed"] for x in results for invariant in x["safety_invariants"])
@@ -59,7 +59,7 @@ def summarize(results: list[dict]) -> dict:
         "relevance": {"market_relevant_cases": len(relevant), "irrelevant_cases": len(irrelevant),"not_evaluated_cases":sum(not evaluated(x) for x in results), "relevant_thesis_rate": rate(sum(proposed(x) for x in relevant if evaluated(x)), sum(evaluated(x) for x in relevant)), "irrelevant_false_positive_rate": rate(sum(proposed(x) for x in irrelevant if evaluated(x)), sum(evaluated(x) for x in irrelevant)), "irrelevant_abstention_rate": rate(sum(not proposed(x) for x in irrelevant if evaluated(x)), sum(evaluated(x) for x in irrelevant))},
         "instrument_quality": {"proposed": all_proposals, "unsupported_instrument_proposals": unsupported, "research_only_results": sum("RESEARCH_ONLY" in x["lifecycle"].get("states", []) for x in results), "unsupported_proposal_rate": rate(unsupported, all_proposals)},
         "direction": direction_summary(results),
-        "performance": {"ai_requests": total, "successful_responses": sum(x["ai"].get("available", False) for x in results), "errors": sum(not x["ai"].get("available", False) for x in results), "timeouts": sum(x["ai"].get("error") in {"TimeoutError", "Timeout"} for x in results), "mean_latency_ms": round(mean(latencies), 3) if latencies else None, "median_latency_ms": round(median(latencies), 3) if latencies else None, "p95_latency_ms": percentile(latencies, .95)},
+        "performance": {"ai_requests": total,"transport_successes":sum(x["ai"].get("transport_status")=="SUCCESS" for x in results),"transport_errors":sum(x["ai"].get("transport_status")=="ERROR" and x["ai"].get("status")!="TIMEOUT" for x in results), "successful_responses":sum(x["engineering"].get("schema_status")=="PASS" for x in results),"invalid_responses":sum(x["engineering"].get("schema_status")=="FAIL" for x in results), "errors":sum(x["engineering"].get("schema_status")!="PASS" for x in results), "timeouts": sum(x["ai"].get("status")=="TIMEOUT" for x in results),"requests_reconciled":sum(x["engineering"].get("schema_status") in {"PASS","FAIL","NOT_EVALUATED"} for x in results)==total, "mean_latency_ms": round(mean(latencies), 3) if latencies else None, "median_latency_ms": round(median(latencies), 3) if latencies else None, "p95_latency_ms": percentile(latencies, .95)},
         "lifecycle": lifecycle_states,
         "execution": {"confirmation_candidates": sum(x["execution"].get("confirmation_candidates", 0) for x in results), "risk_approvals": sum(x["execution"].get("risk_approvals", 0) for x in results), "risk_rejections": sum(x["execution"].get("risk_rejections", 0) for x in results), "broker_orders": sum(x["execution"].get("broker_orders", 0) for x in results), "external_orders": 0, "fills": sum(x["execution"].get("fills", 0) for x in results), "trades": sum(x["execution"].get("trades", 0) for x in results)},
     }
@@ -70,6 +70,7 @@ def direction_summary(results: list[dict]) -> dict:
     for row in results:
         expected = "NO_IMPACT" if not row["expected"]["relevant"] else (row["expected"].get("acceptable_biases") or ["NO_IMPACT"])[0]
         expected = expected if expected in summary else "NO_IMPACT"; assets = row["ai"].get("affected_instruments", [])
-        actual="NOT_EVALUATED" if row["semantic"].get("evaluation_status") in {"TIMEOUT","AI_ERROR","NOT_EVALUATED"} else str(assets[0].get("directional_bias", "NEUTRAL")).upper() if assets else "abstained"
+        is_evaluated=row["semantic"].get("evaluation_status")=="EVALUATED" or "evaluation_status" not in row["semantic"] and row["semantic"].get("score") is not None
+        actual="NOT_EVALUATED" if not is_evaluated else str(assets[0].get("directional_bias", "NEUTRAL")).upper() if assets else "abstained"
         summary[expected][actual if actual in summary[expected] else "NEUTRAL"] += 1
     return summary

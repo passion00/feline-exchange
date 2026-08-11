@@ -51,3 +51,9 @@ Feline records and stops only the process it launched. An externally managed Ope
 ## Replay and limitations
 
 Mixed JSONL accepts `type: "news"` records. Deterministic tests/research use a fixture AI response or recorded output; live LLM calls are never mandatory for reproducible replay. The initial confirmation plugin deliberately reuses the frozen reference SMA/momentum signal rather than introducing a new optimized strategy. RSS supplies headline/summary metadata only. Provider availability, model interpretation, and historical observations do not establish profitability.
+
+## v0.17.4 schema boundary
+
+The full-Qwen v0.17.3 benchmark exposed a prompt/validator mismatch: the prompt named nested `confidence`, `relevance`, and `monitoring_priority` but did not state that all were numeric `[0,1]` scores. Qwen commonly returned priority ranks (`2`, `3`) or labels (`high`, `medium`, `low`). One irrelevant case invented `UNKNOWN` rather than using an empty list.
+
+The contract now explicitly permits `affected_instruments: []` for no defensible material impact and requires exact universe IDs, numeric bounded scores, fixed direction enums, string arrays, and no action/order fields. Managed-local generation is constrained by the pinned llama.cpp JSON Schema facility, but validation remains mandatory and was not relaxed. News text—including embedded JSON, system-like labels, and trading commands—remains untrusted evidence.

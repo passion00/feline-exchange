@@ -318,6 +318,7 @@ class AIAnalysisResult(Event):
     evidence: tuple[str, ...]
     available: bool = True
     error: str | None = None
+    error_detail: str | None = None
     origin_event_ids: tuple[str, ...] = ()
     normalized_source: str | None = None
     publication_timestamp: datetime | None = None

@@ -46,3 +46,9 @@ The workstation AI Opinion panel shows provider/model health, action, confidence
 - AI cannot alter risk thresholds, stops, sizing, exposure limits, feed gates, or the kill switch.
 - A model timeout cannot block quote/candle ingestion or GUI updates.
 - The supplied OpenAI-compatible default is a configurable research backend, not a reliability or profitability guarantee.
+
+## Structured news output (v0.17.4)
+
+`news-market-impact-v1` is explicit down to every required type, enum, array, and `[0.0, 1.0]` score. Managed-local llama.cpp b9637 receives a per-request `response_format` JSON Schema whose instrument enum is built from Feline's supplied universe. External OpenAI-compatible endpoints retain the portable prompt-only request because support cannot be assumed. Both paths pass through the same authoritative validator afterward.
+
+Benign fencing or prose around one JSON object can be extracted, but Feline never fills missing fields, clamps scores, maps arbitrary directions, substitutes instruments, or accepts broker-action fields. Malformed, ambiguous, or schema-invalid output remains unavailable and cannot create a thesis or order.

@@ -60,3 +60,18 @@ Every run writes to ignored `data/experiments/` by default:
 The runner cannot accept an external execution adapter. It uses internal PaperBroker with autonomous execution disarmed. Explicit rejection cases may arm only the internal broker to demonstrate deterministic blocking. Normal broker profiles, positions, watchlists, databases, and emergency-stop state are untouched.
 
 Live RSS observation and a GUI results panel are deferred; existing event/report hooks are reusable. A benchmark score does not imply profitability. Correct news interpretation does not imply profitable execution, and post-news movement does not prove causality.
+
+## Output-state accounting (v0.17.4)
+
+- `TIMEOUT` or `TRANSPORT_ERROR`: no response schema was evaluated.
+- `INVALID_JSON`: transport completed but no single parseable JSON object was returned.
+- `INVALID_SCHEMA`: JSON arrived but failed the authoritative contract.
+- `VALID`: schema validation succeeded, including a deliberate empty affected-instrument list.
+- semantic `abstained`: only a valid response intentionally returned no affected instruments; it scores `1.0` when no impact is expected and `0.0` when relevant impact was missed. Invalid output is always `not_evaluated`.
+- thesis persistence/lifecycle are `NOT_APPLICABLE` after upstream invalidity; safety is still evaluated independently.
+
+Summary accounting exposes transport successes/errors, schema-valid and invalid response counts, timeouts, and a request-reconciliation invariant. Unsupported symbols from invalid raw output remain useful quality diagnostics but never enter semantic scoring.
+
+The v0.17.3 31-case Qwen run had 22 schema failures: 15 cases used string monitoring priorities, 6 used numeric ranks above one, two cases also used string relevance, and one no-impact case selected `UNKNOWN` instead of abstaining (categories overlap). No validator rule was relaxed. v0.17.4 clarifies the generic contract and uses managed-local constrained generation; benchmark expectations remain evaluation-only and are never included in prompts.
+
+The final v0.17.4 local-Qwen run (`data/experiments/qwen-v0174-standard/`) produced 31/31 schema-valid responses, zero timeouts, zero unsupported proposals, zero safety/lifecycle failures, and zero orders. Semantic outcomes were 7 strong matches, 8 partial matches, 3 mismatches, and 13 valid abstentions; mean latency was 22.0 seconds and p95 was 31.0 seconds. The evaluated irrelevant false-positive rate fell from 0.60 to 0.375, but prompt-injection-like text still caused genuine semantic false positives in three cases. These are model-quality limitations, not schema or execution-safety failures.

@@ -283,7 +283,7 @@ def main() -> None:
         finally:
             await runtime.stop()
             runtime.database.close()
-    print("Feline Exchange v0.17.3 starting in PAPER/RESEARCH mode.")
+    print("Feline Exchange v0.17.4 starting in PAPER/RESEARCH mode.")
     asyncio.run(execute())
 
 

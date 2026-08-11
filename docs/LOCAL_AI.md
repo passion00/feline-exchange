@@ -65,3 +65,5 @@ Managed settings under `[ai]` are `model_id` (optional catalog lock), `models_di
 Without internet, installation reports a bounded download error. All non-AI functions remain usable, and AI/news-thesis jobs retain their existing fail-safe unavailable/NO_TRADE behavior.
 
 The default model and synthetic/research workflows carry no quality, trading, or profitability guarantee.
+
+Managed-local news jobs use b9637's verified OpenAI-compatible `response_format` JSON Schema support to constrain generation to the Feline contract and current instrument universe. This is not sent blindly to external endpoints, whose feature support may differ. Deterministic validation remains authoritative in every mode.
