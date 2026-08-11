@@ -1,5 +1,7 @@
 # Feline Exchange Engineering Invariants
 
+v0.17.5 reasoning invariant: news-thesis jobs default to thinking with a fifteen-minute deadline and seeded explicit sampling. Short signal assessment remains independently non-thinking and short-lived. Hidden reasoning is never thesis authority; only strict final structured output is consumed.
+
 v0.17.4 structured-output invariant: managed-local news analysis uses a bounded JSON Schema generated from the supplied instrument universe, followed by the same authoritative fail-closed validator. Invalid schemas are never semantically evaluated or repaired.
 
 v0.17.3 timing invariant: news-thesis inference has a purpose-specific five-minute default. Model latency is not signal freshness, news expiry, thesis expiry, or stale-entry distance; those remain separate controls.

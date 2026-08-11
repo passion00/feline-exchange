@@ -51,11 +51,15 @@ class AIConfig:
     request_timeout_seconds: float = 30.0
     # Purpose-specific deadlines. The generic value remains for legacy and
     # uncategorized jobs; news interpretation is intentionally not HFT.
-    news_thesis_timeout_seconds: float = 300.0
+    news_thesis_timeout_seconds: float = 900.0
     trading_assessment_timeout_seconds: float = 30.0
     retries: int = 1
-    temperature: float = 0.1
-    max_tokens: int = 600
+    temperature: float = 0.6
+    top_p: float = 0.95
+    top_k: int = 20
+    min_p: float = 0.0
+    inference_seed: int = 17
+    max_tokens: int = 2048
     minimum_confidence: float = 0.65
     context_max_age_seconds: float = 20.0
     maximum_price_move_fraction: float = 0.001
@@ -71,15 +75,21 @@ class AIConfig:
     threads: int | None = None
     gpu_layers: int | None = None
     startup_timeout_seconds: float = 30.0
-    reasoning_mode: str = "disabled"
+    # Legacy process-wide preference remains readable. Purpose policies below
+    # are authoritative for request construction.
+    reasoning_mode: str = "auto"
+    news_thesis_reasoning_mode: str = "thinking"
+    trading_assessment_reasoning_mode: str = "disabled"
 
     def __post_init__(self) -> None:
         if self.provider not in {"openai_compatible", "llama_cpp", "managed_local", "local_llama_cpp"}:
             raise ValueError("unsupported AI provider")
         if self.decision_mode not in {"advisory", "record", "confirm_or_veto", "news_thesis"}:
             raise ValueError("invalid AI decision_mode")
-        if not 0 <= self.temperature <= 2 or not 0 <= self.minimum_confidence <= 1:
+        if not 0 <= self.temperature <= 2 or not 0 <= self.top_p <= 1 or self.top_k < 0 or not 0 <= self.min_p <= 1 or not 0 <= self.minimum_confidence <= 1:
             raise ValueError("invalid AI temperature/confidence")
+        if self.reasoning_mode not in {"auto","enabled","thinking","disabled"} or self.news_thesis_reasoning_mode not in {"thinking","disabled"} or self.trading_assessment_reasoning_mode not in {"thinking","disabled"}:
+            raise ValueError("invalid AI reasoning policy")
         if self.request_timeout_seconds <= 0 or self.news_thesis_timeout_seconds <= 0 or self.trading_assessment_timeout_seconds <= 0 or self.retries < 0 or self.max_tokens < 1 or self.queue_size < 1:
             raise ValueError("invalid AI resource bounds")
         if self.context_max_age_seconds <= 0 or self.maximum_price_move_fraction < 0:

@@ -1,5 +1,22 @@
 # News Intelligence Experiments
 
+## v0.17.5 thinking A/B and BIST-TR
+
+`--reasoning thinking|disabled` controls news inference independently of signal review. The experiment seed now reaches managed llama.cpp. Reports include causal-direction consistency, usage when exposed, and sampler metadata. `--suite bist-tr` uses authored Turkish cases and synthetic BIST-like instruments with bounded exposure metadata; expected answers remain evaluation-only.
+
+```bash
+python3 -m feline experiment news-intelligence --suite standard --ai local --start-ai --reasoning thinking --seed 17
+python3 -m feline experiment news-intelligence --suite bist-tr --ai local --start-ai --reasoning thinking --seed 17
+```
+
+These small curated benchmarks do not imply causality, profitability, or executable edge. Offline suites remain externally disarmed.
+
+### v0.17.5 measured result (Qwen3 4B Q4_K_M, seed 17)
+
+On the 31-case standard suite, thinking raised mean semantic score from 0.653 to 0.745 and relevant-thesis rate from 73.9% to 87.0%, but raised irrelevant false positives from 25.0% to 37.5%. All three hostile cases became semantic false positives under thinking, although safety remained 31/31 and no order was possible. Median latency rose from 24.0s to 102.1s.
+
+On the 39-case Turkish/BIST suite, thinking raised mean score from 0.789 to 0.855 and reduced false positives from 57.1% to 42.9%; both Turkish injection cases abstained. Two outputs contained explicit causal/bias contradictions and were rejected before thesis creation. This is reported as a consistency failure distinct from JSON/schema validity. The pinned llama.cpp grammar does not enforce cross-field `if/then`, so the deterministic validator remains authoritative.
+
 Feline v0.17.2 automates evaluation of the production path:
 
 `NewsEvent → AI schema validation → MarketThesis → InstrumentUniverse → FocusManager → completed-candle confirmation → RiskEngine`

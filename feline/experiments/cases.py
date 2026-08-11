@@ -13,9 +13,9 @@ class CaseFormatError(ValueError):
 
 
 def benchmark_path(name: str = "standard") -> Path:
-    if name not in {"standard", "smoke", "safety"}:
+    if name not in {"standard", "smoke", "safety", "bist-tr"}:
         raise CaseFormatError(f"Unknown news-intelligence suite: {name}")
-    return Path(str(files("feline.resources").joinpath("news_benchmark_standard.jsonl")))
+    return Path(str(files("feline.resources").joinpath("news_benchmark_bist_tr.jsonl" if name=="bist-tr" else "news_benchmark_standard.jsonl")))
 
 
 def _case(row: dict) -> ExperimentCase:

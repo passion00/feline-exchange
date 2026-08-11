@@ -1,6 +1,6 @@
-# Feline Exchange v0.17.4 — Structured AI Output Hardening
+# Feline Exchange v0.17.5 — Thinking AI and BIST Intelligence Evaluation
 
-Feline Exchange is a local-first observer, deterministic execution/replay simulator, and market research platform. Version 0.17.4 hardens the structured news-thesis contract with explicit field types and bounds, managed-local llama.cpp JSON Schema generation, strict validation, and reconciled experiment accounting. It preserves v0.17.3's five-minute CPU news-analysis deadline and shorter deterministic signal-review window. The production path remains **news/economic event → bounded AI market thesis → dynamic market focus → deterministic completed-candle confirmation → RiskEngine**. See [Experiments](docs/EXPERIMENTS.md), [Local AI](docs/LOCAL_AI.md), [News Intelligence](docs/NEWS_INTELLIGENCE.md), and [AI Integration](docs/AI_INTEGRATION.md).
+Feline Exchange is a local-first observer, deterministic execution/replay simulator, and market research platform. Version 0.17.5 makes thinking the default for news-thesis work, retains non-thinking short signal review, adds seeded Qwen sampling, causal direction consistency, and an isolated Turkish/BIST benchmark. The production path remains **news/economic event → bounded AI market thesis → dynamic market focus → deterministic completed-candle confirmation → RiskEngine**. See [Experiments](docs/EXPERIMENTS.md), [Local AI](docs/LOCAL_AI.md), [News Intelligence](docs/NEWS_INTELLIGENCE.md), and [AI Integration](docs/AI_INTEGRATION.md).
 
 Run the deterministic benchmark without a model or network: `python3 -m feline experiment news-intelligence --suite standard --ai fixture`.
 

@@ -132,6 +132,7 @@ class AffectedAsset:
     shortable:bool|None=None
     broker_status:str="unknown"
     underlying:str|None=None
+    causal_effect:str="UNCERTAIN"
 
 
 @dataclass(frozen=True,kw_only=True)

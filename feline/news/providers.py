@@ -50,7 +50,7 @@ class RSSNewsProvider:
     provider_name="rss"
     def __init__(self,urls,poll_interval=60.,timeout=10.,max_seen=10_000):self.urls=tuple(urls);self.poll_interval=poll_interval;self.timeout=timeout;self.max_seen=max_seen;self.running=True;self.seen=set();self.health=NewsProviderHealth(self.provider_name,"CONFIGURED" if self.urls else "NOT_CONFIGURED")
     def _download(self,url):
-        req=request.Request(url,headers={"User-Agent":"FelineExchange/0.17.4 RSS"})
+        req=request.Request(url,headers={"User-Agent":"FelineExchange/0.17.5 RSS"})
         with request.urlopen(req,timeout=self.timeout) as response:return response.read()
     async def stream(self):
         failures=0

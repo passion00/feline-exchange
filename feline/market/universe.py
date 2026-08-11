@@ -3,7 +3,7 @@ from dataclasses import asdict,dataclass
 
 @dataclass(frozen=True)
 class InstrumentRecord:
-    instrument:str;broker_symbol:str;asset_class:str="unknown";name:str="";aliases:tuple[str,...]=();broker:str="unknown";tradable:bool=False;longable:bool=False;shortable:bool=False;market_data:bool=True
+    instrument:str;broker_symbol:str;asset_class:str="unknown";name:str="";aliases:tuple[str,...]=();broker:str="unknown";tradable:bool=False;longable:bool=False;shortable:bool=False;market_data:bool=True;market_context:dict|None=None
     def prompt_dict(self):return asdict(self)
 
 class InstrumentUniverse:
@@ -22,7 +22,7 @@ class InstrumentUniverse:
         if not symbols: symbols=list(cls.DEFAULTS)
         records=[]
         for symbol in dict.fromkeys(str(x).replace("/","").upper() for x in symbols):
-            metadata=(configured or {}).get(symbol,{}) if configured else {};fallback=cls.DEFAULTS.get(symbol,(metadata.get("asset_class","unknown"),metadata.get("name",symbol),tuple(metadata.get("aliases",()))));asset_class=metadata.get("asset_class",fallback[0]);trade=bool(getattr(caps,"market_orders",False)) if caps else name=="internal_paper";shortable=bool(metadata["shortable"]) if "shortable" in metadata else bool(trade and asset_class in {"fx","metal","crypto"});records.append(InstrumentRecord(symbol,metadata.get("broker_symbol",symbol),asset_class,metadata.get("name",fallback[1]),tuple(metadata.get("aliases",fallback[2])),name,trade,trade,shortable,True))
+            metadata=(configured or {}).get(symbol,{}) if configured else {};fallback=cls.DEFAULTS.get(symbol,(metadata.get("asset_class","unknown"),metadata.get("name",symbol),tuple(metadata.get("aliases",()))));asset_class=metadata.get("asset_class",fallback[0]);trade=bool(metadata["tradable"]) if "tradable" in metadata else bool(getattr(caps,"market_orders",False)) if caps else name=="internal_paper";shortable=bool(metadata["shortable"]) if "shortable" in metadata else bool(trade and asset_class in {"fx","metal","crypto"});context={key:metadata[key] for key in ("sector","exporter_exposure","importer_exposure","commodity_sensitivity","fx_sensitivity","interest_rate_sensitivity") if key in metadata};records.append(InstrumentRecord(symbol,metadata.get("broker_symbol",symbol),asset_class,metadata.get("name",fallback[1]),tuple(metadata.get("aliases",fallback[2])),name,trade,trade,shortable,True,context or None))
         return cls(records)
     def get(self,instrument):return self.records.get(str(instrument).replace("/","").upper())
     def bounded_prompt(self):return [self.records[key].prompt_dict() for key in sorted(self.records)[:self.maximum]]

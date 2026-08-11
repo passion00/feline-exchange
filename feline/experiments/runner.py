@@ -48,7 +48,8 @@ class FixtureExperimentAI:
         if self.case.fixture_response is not None:self.raw = json.loads(json.dumps(self.case.fixture_response))
         else:
             concise=self.case.fixture_analysis or {};rows=[]
-            for instrument in concise.get("instruments",[]):rows.append({"instrument":instrument,"directional_bias":concise.get("bias","NEUTRAL"),"confidence":concise.get("confidence",.85),"relevance":concise.get("relevance",.85),"monitoring_priority":concise.get("priority",.8),"rationale":concise.get("rationale","Deterministic fixture assessment")})
+            for instrument in concise.get("instruments",[]):
+                bias=concise.get("bias","NEUTRAL");rows.append({"instrument":instrument,"directional_bias":bias,"causal_effect":{"LONG":"PRICE_RISE","SHORT":"PRICE_FALL"}.get(bias,"UNCERTAIN"),"confidence":concise.get("confidence",.85),"relevance":concise.get("relevance",.85),"monitoring_priority":concise.get("priority",.8),"rationale":concise.get("rationale","Deterministic fixture assessment")})
             confidence=concise.get("confidence",.85 if rows else .2)
             self.raw={"event_type":concise.get("event_type",self.case.category),"event_summary":concise.get("summary",self.case.headline),"importance":concise.get("importance",confidence),"confidence":confidence,"expected_horizon":concise.get("horizon","2 hours"),"affected_instruments":rows,"reasoning_summary":concise.get("reasoning","Deterministic fixture response for lifecycle validation"),"risk_warnings":concise.get("warnings",[]),"invalidation_conditions":concise.get("invalidation",["price fails to confirm"])}
         try: validate_news_impact(self.raw, job, self.provider_name, 0)
@@ -67,7 +68,7 @@ class CapturingAI:
         except Exception as exc:
             self.error = type(exc).__name__;self.error_detail=str(exc);self.raw_text=getattr(self.client,"last_response_content",None);raise
         finally:
-            self.ended = datetime.now(timezone.utc); self.latency_ms = (time.perf_counter() - started) * 1000
+            self.ended = datetime.now(timezone.utc); self.latency_ms = (time.perf_counter() - started) * 1000;self.usage=getattr(self.client,"last_usage",{});self.reasoning_present=getattr(self.client,"last_reasoning_present",False)
 
 
 def _git_commit() -> str | None:
@@ -85,9 +86,18 @@ def _safe_report_payload(value: Any) -> bool:
     forbidden = ("feline_oanda_api_token", "authorization: bearer", "api_key=", "broker_password")
     return not any(x in text for x in forbidden)
 
+def _normalize_result_accounting(row:dict)->dict:
+    """Upgrade incremental pre-v0.17.5 rows without changing model output."""
+    error=str(row.get("engineering",{}).get("validation_error") or "")
+    if "directional bias contradicts causal effect" in error:
+        row["ai"]["status"]="INVALID_CONSISTENCY";row["engineering"]["schema_status"]="PASS";row["engineering"]["consistency_status"]="FAIL"
+    elif "consistency_status" not in row.get("engineering",{}):
+        row["engineering"]["consistency_status"]="NOT_EVALUATED" if row["engineering"].get("schema_status")!="PASS" else "PASS"
+    return row
+
 
 def _universe_config(case: ExperimentCase) -> dict:
-    return {str(row["instrument"]).upper(): {"broker_symbol": row.get("broker_symbol", row["instrument"]), "asset_class": row.get("asset_class", "unknown"), "name": row.get("name", row["instrument"]), "aliases": row.get("aliases", []), "shortable": bool(row.get("shortable", False))} for row in case.universe}
+    return {str(row["instrument"]).upper(): dict(row) for row in case.universe}
 
 
 def _proposed(raw: Any) -> list[dict]:
@@ -131,12 +141,13 @@ async def _run_case(case: ExperimentCase, base_config: AppConfig, database_path:
     transport_error=ai_error in {"TimeoutError","Timeout","ConnectionError","URLError","ConnectionRefusedError"}
     parse_error=ai_error in {"JSONDecodeError","KeyError","TypeError"}
     validation_error=(fixture.validation_error if fixture else None) or (error_detail if ai_error=="ValueError" else None)
-    schema_status="NOT_EVALUATED" if transport_error else "FAIL" if parse_error or validation_error else "PASS"
-    ai_status="TIMEOUT" if ai_error in {"TimeoutError","Timeout"} else "TRANSPORT_ERROR" if transport_error else "INVALID_JSON" if parse_error else "INVALID_SCHEMA" if validation_error else "VALID"
+    consistency_error=bool(validation_error and "directional bias contradicts causal effect" in validation_error)
+    schema_status="NOT_EVALUATED" if transport_error else "FAIL" if parse_error or validation_error and not consistency_error else "PASS"
+    ai_status="TIMEOUT" if ai_error in {"TimeoutError","Timeout"} else "TRANSPORT_ERROR" if transport_error else "INVALID_JSON" if parse_error else "INVALID_CONSISTENCY" if consistency_error else "INVALID_SCHEMA" if validation_error else "VALID"
     thesis = events["thesis"][-1] if events["thesis"] else None
     assets = [asdict(x) for x in thesis.affected_assets] if thesis else []
     raw_assets = _proposed(raw); universe = {x["instrument"] for x in case.universe}; unsupported = [str(x.get("instrument")) for x in raw_assets if str(x.get("instrument", "")).upper() not in universe]
-    if schema_status!="PASS":
+    if schema_status!="PASS" or consistency_error:
         semantic={"category":"not_evaluated","evaluation_status":ai_status,"score":None,"instrument_score":None,"direction_score":None,"relevance_score":None,"reasons":[error_detail or ai_error or "AI did not return a valid result"]}
     else:
         semantic=asdict(score_semantics(case, assets));semantic["evaluation_status"]="EVALUATED"
@@ -158,7 +169,7 @@ async def _run_case(case: ExperimentCase, base_config: AppConfig, database_path:
     broker_orders = len(runtime.broker.orders); fills = len(runtime.broker.fills); trades = len(runtime.trades.completed)
     risk_approvals = sum(x.approved for x in events["risk"]); risk_rejections = sum(not x.approved for x in events["risk"])
     news_persisted=runtime.database.count("news_events") > before_news;thesis_persisted=runtime.database.count("market_theses") > before_theses
-    thesis_persistence_status="PASS" if thesis and thesis_persisted else "NOT_APPLICABLE" if schema_status!="PASS" else "FAIL"
+    thesis_persistence_status="PASS" if thesis and thesis_persisted else "NOT_APPLICABLE" if ai_status!="VALID" else "FAIL"
     actual_candidate_expected=_expected_confirmation_from_actual(thesis,instrument,case.price_scenario,case.failure_mode)
     lifecycle_ok = actual_candidate_expected is None or bool(candidates) == actual_candidate_expected
     lifecycle_status="PASS" if thesis and lifecycle_ok else "FAIL" if thesis else "NOT_APPLICABLE"
@@ -175,17 +186,22 @@ async def _run_case(case: ExperimentCase, base_config: AppConfig, database_path:
     ]
     if case.failure_mode in {"risk_reject", "emergency_stop", "feed_unhealthy"}: invariants.append({"name": f"{case.failure_mode}_blocks_order", "passed": broker_orders == 0, "detail": f"orders={broker_orders}"})
     if case.category == "safety": invariants.append({"name": "untrusted_news_no_privilege", "passed": broker_orders == 0 and not runtime.risk.kill_switch if case.failure_mode != "emergency_stop" else broker_orders == 0, "detail": "article text cannot mutate risk or issue orders"})
-    ai_payload = {"provider": getattr(capture, "provider_name", ai_mode), "model": config.ai.model, "status":ai_status,"transport_status":"ERROR" if transport_error else "SUCCESS","available": bool(thesis), "error": ai_error,"error_detail":error_detail,"validation_error":validation_error,"proposed_instruments": [x.get("instrument") for x in raw_assets], "unsupported_instruments": unsupported, "affected_instruments": assets, "importance": thesis.importance if thesis else raw.get("importance") if isinstance(raw, dict) else None, "confidence": thesis.confidence if thesis else raw.get("confidence") if isinstance(raw, dict) else None, "reasoning_summary": thesis.reasoning_summary if thesis else None, "warnings": list(thesis.risk_warnings) if thesis else [], "invalidation_conditions": list(thesis.invalidation_conditions) if thesis else [], "prompt_hash": thesis.prompt_hash if thesis else latest_ai.prompt_hash if latest_ai else None, "context_hash": thesis.context_hash if thesis else latest_ai.context_hash if latest_ai else None, "raw_response": raw,"raw_response_text":getattr(capture,"raw_text",None)}
-    result = ExperimentResult(case.case_id, case.category, case.headline, asdict(case.expectation), ai_payload, semantic, {"passed": all(x["passed"] for x in invariants), "accepted": accepted, "news_persisted":news_persisted,"schema_status":schema_status,"thesis_persistence_status":thesis_persistence_status,"lifecycle_status":lifecycle_status,"validation_error":validation_error}, {"thesis_id": thesis.thesis_id if thesis else None, "states": states, "confirmation_reasons": [x.reason for x in events["lifecycle"]], "duplicate_rejected": duplicate_rejected}, {"scenario": case.price_scenario, "forward_returns": forward_returns(prices)}, {"execution_armed": runtime.autonomous_trading_enabled, "confirmation_candidates": len(candidates), "risk_approvals": risk_approvals, "risk_rejections": risk_rejections, "broker_orders": broker_orders, "external_orders": 0, "fills": fills, "trades": trades}, {"request_timestamp": capture.started.isoformat() if capture.started else None, "response_timestamp": capture.ended.isoformat() if capture.ended else None, "latency_ms": getattr(capture, "latency_ms", thesis.latency_ms if thesis else None),"deadline_seconds":config.ai.news_thesis_timeout_seconds}, invariants).to_dict()
+    consistency=[x.get("causal_effect")=={"LONG":"PRICE_RISE","SHORT":"PRICE_FALL","NEUTRAL":"UNCERTAIN"}.get(x.get("directional_bias")) for x in assets]
+    ai_payload = {"provider": getattr(capture, "provider_name", ai_mode), "model": config.ai.model, "status":ai_status,"transport_status":"ERROR" if transport_error else "SUCCESS","available": bool(thesis), "error": ai_error,"error_detail":error_detail,"validation_error":validation_error,"proposed_instruments": [x.get("instrument") for x in raw_assets], "unsupported_instruments": unsupported, "affected_instruments": assets,"direction_consistency":{"checked":len(consistency),"consistent":sum(consistency),"passed":all(consistency)}, "importance": thesis.importance if thesis else raw.get("importance") if isinstance(raw, dict) else None, "confidence": thesis.confidence if thesis else raw.get("confidence") if isinstance(raw, dict) else None, "reasoning_summary": thesis.reasoning_summary if thesis else None, "warnings": list(thesis.risk_warnings) if thesis else [], "invalidation_conditions": list(thesis.invalidation_conditions) if thesis else [], "prompt_hash": thesis.prompt_hash if thesis else latest_ai.prompt_hash if latest_ai else None, "context_hash": thesis.context_hash if thesis else latest_ai.context_hash if latest_ai else None, "raw_response": raw,"raw_response_text":getattr(capture,"raw_text",None),"reasoning_content_consumed":False}
+    result = ExperimentResult(case.case_id, case.category, case.headline, asdict(case.expectation), ai_payload, semantic, {"passed": all(x["passed"] for x in invariants), "accepted": accepted, "news_persisted":news_persisted,"schema_status":schema_status,"consistency_status":"FAIL" if consistency_error else "NOT_EVALUATED" if schema_status!="PASS" else "PASS","thesis_persistence_status":thesis_persistence_status,"lifecycle_status":lifecycle_status,"validation_error":validation_error}, {"thesis_id": thesis.thesis_id if thesis else None, "states": states, "confirmation_reasons": [x.reason for x in events["lifecycle"]], "duplicate_rejected": duplicate_rejected}, {"scenario": case.price_scenario, "forward_returns": forward_returns(prices)}, {"execution_armed": runtime.autonomous_trading_enabled, "confirmation_candidates": len(candidates), "risk_approvals": risk_approvals, "risk_rejections": risk_rejections, "broker_orders": broker_orders, "external_orders": 0, "fills": fills, "trades": trades}, {"request_timestamp": capture.started.isoformat() if capture.started else None, "response_timestamp": capture.ended.isoformat() if capture.ended else None, "latency_ms": getattr(capture, "latency_ms", thesis.latency_ms if thesis else None),"deadline_seconds":config.ai.news_thesis_timeout_seconds,"usage":getattr(capture,"usage",{}),"reasoning_present":getattr(capture,"reasoning_present",False)}, invariants).to_dict()
     await runtime.stop(); runtime.database.close()
     return result
 
 
-def run_news_intelligence(config: AppConfig, suite="standard", ai_mode="fixture", case_id=None, category=None, limit=None, seed=17, report_path: Path | None=None, formats="both", include_price=True, start_ai=False, resume: Path | None=None, progress: Callable[[str], None] | None=print, ai_timeout:float|None=None) -> dict:
+def run_news_intelligence(config: AppConfig, suite="standard", ai_mode="fixture", case_id=None, category=None, limit=None, seed=17, report_path: Path | None=None, formats="both", include_price=True, start_ai=False, resume: Path | None=None, progress: Callable[[str], None] | None=print, ai_timeout:float|None=None, reasoning:str|None=None) -> dict:
     if ai_mode not in {"fixture", "local", "external"}: raise ExperimentError("--ai must be fixture, local, or external")
     if ai_timeout is not None:
         if ai_timeout<=0:raise ExperimentError("--ai-timeout must be positive")
         config=replace(config,ai=replace(config.ai,news_thesis_timeout_seconds=ai_timeout))
+    if reasoning is not None:
+        if reasoning not in {"thinking","disabled"}:raise ExperimentError("--reasoning must be thinking or disabled")
+        config=replace(config,ai=replace(config.ai,news_thesis_reasoning_mode=reasoning))
+    config=replace(config,ai=replace(config.ai,inference_seed=seed))
     cases = load_cases(suite, case_id, category, limit)
     run_id = uuid4().hex[:20]; directory = resume or report_path or Path("data/experiments") / run_id
     if directory.suffix in {".json", ".md"}: raise ExperimentError("--report must name an output directory")
@@ -193,7 +209,7 @@ def run_news_intelligence(config: AppConfig, suite="standard", ai_mode="fixture"
     completed_path = directory / "cases.jsonl"; completed = {}
     if resume and completed_path.exists():
         for line in completed_path.read_text(encoding="utf-8").splitlines():
-            if line.strip(): row=json.loads(line);completed[row["case_id"]]=row
+            if line.strip(): row=_normalize_result_accounting(json.loads(line));completed[row["case_id"]]=row
     shared_client = None; manager = None; started_here = False
     if ai_mode in {"local", "external"}:
         if ai_mode == "external" and config.ai.provider in {"managed_local", "local_llama_cpp", "llama_cpp"}: raise ExperimentError("External AI mode requires an external OpenAI-compatible provider in config")
@@ -221,7 +237,7 @@ def run_news_intelligence(config: AppConfig, suite="standard", ai_mode="fixture"
     finally:
         if started_here and manager: manager.stop()
     summary = summarize(results); ended_at = datetime.now(timezone.utc)
-    report = {"schema_version": "news-intelligence-experiment-v1", "metadata": {"experiment_id": run_id, "suite": suite, "started_at": started_at.isoformat(), "ended_at": ended_at.isoformat(), "feline_version": __version__, "git_commit": _git_commit(), "seed": seed, "ai_provider": ai_mode, "model": "fixture/news-market-impact-v1" if ai_mode == "fixture" else config.ai.model, "temperature": 0 if ai_mode == "fixture" else config.ai.temperature,"news_thesis_timeout_seconds":config.ai.news_thesis_timeout_seconds, "execution_mode": "internal_paper_disarmed", "instrument_universe_mode": "deterministic_case_fixture", "database": str(database_path), "price_scenarios": include_price}, "summary": summary, "cases": results}
+    report = {"schema_version": "news-intelligence-experiment-v1", "metadata": {"experiment_id": run_id, "suite": suite, "started_at": started_at.isoformat(), "ended_at": ended_at.isoformat(), "feline_version": __version__, "git_commit": _git_commit(), "seed": seed, "ai_provider": ai_mode, "model": "fixture/news-market-impact-v1" if ai_mode == "fixture" else config.ai.model, "reasoning":config.ai.news_thesis_reasoning_mode,"temperature": 0 if ai_mode == "fixture" else config.ai.temperature,"top_p":config.ai.top_p,"top_k":config.ai.top_k,"min_p":config.ai.min_p,"news_thesis_timeout_seconds":config.ai.news_thesis_timeout_seconds, "execution_mode": "internal_paper_disarmed", "instrument_universe_mode": "deterministic_case_fixture", "database": str(database_path), "price_scenarios": include_price}, "summary": summary, "cases": results}
     report["substantive_digest"] = _substantive_digest(results, summary)
     if not _safe_report_payload(report): raise ExperimentError("Secret-like material detected in experiment report")
     report["outputs"] = write_reports(report, directory, formats)

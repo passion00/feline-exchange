@@ -94,6 +94,9 @@ class LocalAIProcessManager:
                 argv += ["--reasoning-budget", "0"]
             else:
                 warnings.append("Installed runtime does not advertise a reasoning-disable option; starting without one.")
+        elif config.reasoning_mode in {"auto","enabled","thinking"} and self.runtime_supports(executable,"--reasoning"):
+            argv += ["--reasoning", "auto" if config.reasoning_mode=="auto" else "on"]
+            if self.runtime_supports(executable,"--reasoning-format"):argv += ["--reasoning-format","deepseek"]
         return argv, warnings
 
     def start(self, config) -> dict:

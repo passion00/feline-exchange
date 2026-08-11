@@ -33,7 +33,7 @@ def news_job():
 
 class TimeoutPolicyTests(unittest.TestCase):
  def test_defaults_and_purpose_separation(self):
-  config=AIConfig();self.assertEqual(timeout_for_job(config,news_job()),300);self.assertEqual(timeout_for_job(config,"signal_assessment"),30);self.assertEqual(timeout_for_job(config,"news_assessment"),30)
+  config=AIConfig();self.assertEqual(timeout_for_job(config,news_job()),900);self.assertEqual(timeout_for_job(config,"signal_assessment"),30);self.assertEqual(timeout_for_job(config,"news_assessment"),30)
   legacy=AIConfig(request_timeout_seconds=17,news_thesis_timeout_seconds=250,trading_assessment_timeout_seconds=11);self.assertEqual(timeout_for_job(legacy,"news_assessment"),17);self.assertEqual(timeout_for_job(legacy,news_job()),250);self.assertEqual(timeout_for_job(legacy,"signal_assessment"),11)
 
  def test_client_transport_uses_same_job_timeout(self):
@@ -45,7 +45,7 @@ class TimeoutPolicyTests(unittest.TestCase):
   def opener(request,timeout):seen.append(timeout);return Response()
   signal=AnalysisJob(NewsEvent(timestamp=NOW,headline="signal",body="",instruments=("EURUSD",)),purpose="signal_assessment")
   with patch("feline.intelligence.service.urlrequest.urlopen",side_effect=opener):self.assertEqual(LlamaCppClient(AIConfig())._request(news_job()),impact());LlamaCppClient(AIConfig())._request(signal)
-  self.assertEqual(seen,[300,30])
+  self.assertEqual(seen,[900,30])
 
  def test_config_rejects_invalid_purpose_deadlines(self):
   with self.assertRaises(ValueError):AIConfig(news_thesis_timeout_seconds=0)
