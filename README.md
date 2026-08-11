@@ -1,8 +1,17 @@
-# Feline Exchange v0.17.0 — News-Driven Market Intelligence
+# Feline Exchange v0.17.1 — Portable Local AI Bootstrap
 
-Feline Exchange is a local-first observer, deterministic execution/replay simulator, and market research platform. Version 0.17 adds the primary intelligence path **news/economic event → bounded AI market thesis → dynamic market focus → deterministic completed-candle confirmation → RiskEngine → selected broker**. AI can identify what deserves attention but cannot create an order. Existing advisory, record, confirm-or-veto, replay, research, PaperBroker, and v0.16 Broker Manager paths remain available. See [News Intelligence](docs/NEWS_INTELLIGENCE.md), [Broker Adapters](docs/BROKER_ADAPTERS.md), and [AI Integration](docs/AI_INTEGRATION.md).
+Feline Exchange is a local-first observer, deterministic execution/replay simulator, and market research platform. Version 0.17.1 makes the optional local AI runtime portable: Feline owns a pinned repository-local llama.cpp installation, verified/resumable model downloads, model selection, hardware guidance, and safe process lifecycle. The v0.17 intelligence path remains **news/economic event → bounded AI market thesis → dynamic market focus → deterministic completed-candle confirmation → RiskEngine → selected broker**. See [Local AI](docs/LOCAL_AI.md), [News Intelligence](docs/NEWS_INTELLIGENCE.md), and [AI Integration](docs/AI_INTEGRATION.md).
 
 AI configuration is provider-neutral at the trading layer. The included practical backend speaks the OpenAI-compatible chat-completions protocol (including local `llama.cpp`); invalid, stale, low-confidence, unavailable, or contradictory assessments fail closed without blocking market ingestion.
+
+Portable local-AI first run is explicit—ordinary Feline startup never silently downloads the approximately 2.33 GiB default model:
+
+```bash
+python3 -m feline ai list-models
+python3 -m feline ai install --yes
+python3 -m feline ai start-local
+python3 -m feline ai status
+```
 
 Continuous multi-market examples:
 
@@ -62,7 +71,7 @@ Offline replay with readable and JSON output:
 python3 -m feline replay tests/fixtures/sample_ticks.csv --speed max --strategy reference --report data/report.json
 ```
 
-Install an optional CLI entry point with `python3 -m pip install -e .`, then use `feline paper`. AI defaults to Lynx's local llama.cpp-compatible endpoint at `127.0.0.1:8081`, but Feline does not start or require that server.
+Install an optional CLI entry point with `python3 -m pip install -e .`, then use `feline paper`. AI defaults to Feline's managed-local mode at `127.0.0.1:8081`; Feline checks but does not require or silently install/start the optional server. External OpenAI-compatible endpoints remain supported.
 
 Emergency stop creates an ignored persistent marker, is detected by a running market loop on its next tick, and blocks later starts:
 

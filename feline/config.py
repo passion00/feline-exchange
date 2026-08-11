@@ -44,9 +44,10 @@ class PaperConfig:
 @dataclass(frozen=True)
 class AIConfig:
     enabled: bool = True
-    provider: str = "openai_compatible"
+    provider: str = "managed_local"
     base_url: str = "http://127.0.0.1:8081"
-    model: str = "llmware/qwen3-4b-instruct-gguf:Q4_K_M"
+    model: str = "feline/qwen3-4b-q4km"
+    model_id: str | None = None
     request_timeout_seconds: float = 30.0
     retries: int = 1
     temperature: float = 0.1
@@ -58,10 +59,18 @@ class AIConfig:
     queue_size: int = 32
     local_model_path: str | None = None
     llama_server_executable: str | None = None
+    models_directory: str = "models"
+    runtime_directory: str = "runtime/llama.cpp"
+    preference_path: str = "data/ai_preferences.json"
+    custom_model_path: str | None = None
+    context_size: int = 8192
+    threads: int | None = None
+    gpu_layers: int | None = None
+    startup_timeout_seconds: float = 30.0
     reasoning_mode: str = "disabled"
 
     def __post_init__(self) -> None:
-        if self.provider not in {"openai_compatible", "llama_cpp"}:
+        if self.provider not in {"openai_compatible", "llama_cpp", "managed_local", "local_llama_cpp"}:
             raise ValueError("unsupported AI provider")
         if self.decision_mode not in {"advisory", "record", "confirm_or_veto", "news_thesis"}:
             raise ValueError("invalid AI decision_mode")
@@ -71,6 +80,8 @@ class AIConfig:
             raise ValueError("invalid AI resource bounds")
         if self.context_max_age_seconds <= 0 or self.maximum_price_move_fraction < 0:
             raise ValueError("invalid AI freshness bounds")
+        if self.context_size < 512 or self.threads is not None and self.threads < 1 or self.gpu_layers is not None and self.gpu_layers < 0 or self.startup_timeout_seconds <= 0:
+            raise ValueError("invalid managed local AI settings")
 
 
 @dataclass(frozen=True)
@@ -147,6 +158,14 @@ def load_config(path: Path | None = None) -> AppConfig:
         raise ValueError("Feline v0.1 supports paper mode only")
     continuous = dict(data.get("continuous", {}))
     continuous_risk_sizing = dict(continuous.pop("risk_sizing", {}))
+    ai_data=dict(data.get("ai",{}));preference=Path(ai_data.get("preference_path","data/ai_preferences.json")).expanduser()
+    if not preference.is_absolute():preference=(Path(__file__).resolve().parents[1]/preference).resolve()
+    try:
+        import json
+        user_ai=json.loads(preference.read_text())
+        for key in ("provider","base_url","model"):
+            if key in user_ai:ai_data[key]=user_ai[key]
+    except (OSError,ValueError):pass
     return AppConfig(
         mode=mode,
         database_path=str(data.get("database_path", "data/feline.db")),
@@ -154,7 +173,7 @@ def load_config(path: Path | None = None) -> AppConfig:
         tick_interval_seconds=max(0.01, float(data.get("tick_interval_seconds", 0.25))),
         risk=RiskConfig(**data.get("risk", {})),
         paper=PaperConfig(**data.get("paper", {})),
-        ai=AIConfig(**data.get("ai", {})),
+        ai=AIConfig(**ai_data),
         news=NewsConfig(**{**data.get("news",{}),"feed_urls":tuple(data.get("news",{}).get("feed_urls",()))}),
         thesis=ThesisConfig(**data.get("thesis",{})),
         confirmation=ConfirmationConfig(**data.get("confirmation",{})),

@@ -16,6 +16,14 @@ data/*
 models/*
 !models/README.md
 !models/.gitkeep
+runtime/llama.cpp/*
+!runtime/llama.cpp/README.md
+!runtime/llama.cpp/.gitkeep
+*.gguf.part
+*.download.part
+*.archive.part
+*.checksum.tmp
+*.install-staging*
 market-data/
 *.csv
 *.parquet

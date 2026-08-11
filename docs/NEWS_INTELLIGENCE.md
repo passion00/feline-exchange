@@ -33,15 +33,16 @@ python3 -m feline news inject --headline "Major export disruption reported" --bo
 
 For an offline deterministic smoke test, `--response-fixture tests/fixtures/news_impact_bullish.json` replaces only the model transport; normalization, validation, persistence, focus, and confirmation remain the production path. Fixture responses are explicitly test-only and cannot place orders because injection starts a disarmed runtime.
 
-Local llama.cpp is optional. Configure `local_model_path` and `llama_server_executable`, then use:
+Local llama.cpp is optional and repository-local by default. Install the pinned runtime/default Qwen model explicitly, then manage only Feline's process:
 
 ```bash
+python3 -m feline ai install --yes
 python3 -m feline ai start-local
 python3 -m feline ai status
 python3 -m feline ai stop-local
 ```
 
-Feline records and stops only the process it launched. An externally managed OpenAI-compatible endpoint remains supported. GGUF files and symlinks may live under `models/`; weights are ignored by Git.
+Feline records and stops only the process it launched. An externally managed OpenAI-compatible endpoint remains supported. GGUF files and symlinks live under ignored `models/`; see [Portable Local AI](LOCAL_AI.md) for model selection, custom GGUF, integrity, hardware guidance, and offline behavior.
 
 ## Replay and limitations
 

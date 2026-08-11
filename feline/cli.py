@@ -34,7 +34,7 @@ def parser() -> argparse.ArgumentParser:
     subs.add_parser("doctor")
     subs.add_parser("gui")
     news=subs.add_parser("news",help="news intelligence ingestion");news.add_argument("action",choices=["inject"]);news.add_argument("--headline",required=True);news.add_argument("--body",default="");news.add_argument("--source",default="manual");news.add_argument("--instrument",action="append",default=[]);news.add_argument("--response-fixture",type=Path,help="offline testing only: deterministic news-market-impact-v1 JSON response")
-    ai=subs.add_parser("ai",help="optional local llama.cpp process");ai.add_argument("action",choices=["start-local","stop-local","status"])
+    ai=subs.add_parser("ai",help="portable local AI assets and process management");ai.add_argument("action",choices=["status","install","install-runtime","install-model","start-local","stop-local","list-models","select-model","import-model"]);ai.add_argument("value",nargs="?");ai.add_argument("--yes",action="store_true",help="confirm large downloads non-interactively");ai.add_argument("--copy",action="store_true",help="copy an imported GGUF instead of creating a symlink")
     data=subs.add_parser("data",help="provider-native historical research data")
     data.add_argument("action",choices=["download","quality","audit"]);data.add_argument("dataset",type=Path,nargs="?")
     data.add_argument("--provider",choices=["oanda","dukascopy","binance"]);data.add_argument("--instrument",required=True)
@@ -70,8 +70,34 @@ def main() -> None:
         from feline.intelligence.operations import ai_health
         db=Database(Path(config.database_path));report=db.integrity_report();db.close();report["ai"]=ai_health(config.ai);report["news"]={"enabled":config.news.enabled,"provider":config.news.provider,"configured":bool(config.news.feed_urls),"feed_count":len(config.news.feed_urls)};print(json.dumps(report,indent=2));raise SystemExit(0 if report["ok"] else 1)
     if args.command=="ai":
+        from feline.intelligence.assets import AIAssetError,LocalAIAssets,detect_hardware
         from feline.intelligence.operations import LocalAIProcessManager,ai_health
-        manager=LocalAIProcessManager();result=manager.start(config.ai) if args.action=="start-local" else manager.stop() if args.action=="stop-local" else {"process":manager.status(),"health":ai_health(config.ai)};print(json.dumps(result,indent=2));return
+        assets=LocalAIAssets(config.ai);manager=LocalAIProcessManager()
+        try:
+            if args.action=="status":result={"assets":assets.status(),"process":manager.status(),"health":ai_health(config.ai)}
+            elif args.action=="list-models":result={"default":assets.catalog.default_model_id,"hardware":__import__('dataclasses').asdict(detect_hardware()),"models":assets.catalog_rows()}
+            elif args.action=="select-model":
+                if not args.value:raise AIAssetError("select-model requires a catalog model ID")
+                result=assets.select_model(args.value)
+            elif args.action=="import-model":
+                if not args.value:raise AIAssetError("import-model requires a path to an existing GGUF")
+                result=assets.import_model(Path(args.value),args.copy)
+            elif args.action in {"install","install-runtime","install-model"}:
+                model=assets.selected_model();model_bytes=0 if assets.model_path().is_file() else model.size_bytes;runtime_bytes=0 if assets.runtime_executable().is_file() else assets.catalog.runtime_for().size_bytes;estimated=runtime_bytes if args.action=="install-runtime" else model_bytes+runtime_bytes if args.action=="install" else model_bytes
+                if estimated and not args.yes:
+                    if not __import__('sys').stdin.isatty():raise AIAssetError(f"Installation downloads approximately {estimated/1024**3:.2f} GiB. Re-run with --yes to confirm.")
+                    answer=input(f"Install repository-local AI assets (approximately {estimated/1024**3:.2f} GiB model download)? [y/N] ")
+                    if answer.strip().lower() not in {"y","yes"}:raise AIAssetError("Installation cancelled")
+                def progress(row):
+                    percent=f" {row['percent']:.1f}%" if row.get('percent') is not None else "";print(f"\rDownloading {Path(row['destination']).name}: {row['downloaded']} bytes{percent}",end="",file=__import__('sys').stderr,flush=True)
+                result=assets.install(progress) if args.action=="install" else {"runtime":str(assets.install_runtime(progress))} if args.action=="install-runtime" else {"model":str(assets.install_model(progress))}
+            elif args.action=="start-local":
+                result=manager.start(config.ai)
+                if result.get("state")=="STARTING":result={"process":result,"readiness":manager.wait_until_ready(config.ai)}
+            else:result=manager.stop()
+        except (AIAssetError,ValueError,FileNotFoundError) as exc:
+            print(f"Local AI: {exc}",file=__import__('sys').stderr);raise SystemExit(2) from None
+        print(json.dumps(result,indent=2,default=str));return
     if args.command=="news":
         from dataclasses import replace
         from datetime import datetime,timezone
@@ -244,7 +270,7 @@ def main() -> None:
         finally:
             await runtime.stop()
             runtime.database.close()
-    print("Feline Exchange v0.17.0 starting in PAPER/RESEARCH mode.")
+    print("Feline Exchange v0.17.1 starting in PAPER/RESEARCH mode.")
     asyncio.run(execute())
 
 

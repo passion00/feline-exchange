@@ -33,6 +33,7 @@ dataset cannot automatically enter signal research.
 24. Announcement-, one-minute-, and stabilization-anchored research metrics remain distinct; descriptive post-shock labels never alter strategy decisions.
 25. Corpus preparation is mechanical and idempotent; experiment outcome inspection requires an explicit `--run` or read-only comparison command.
 26. News and economic-event text is untrusted evidence only. AI may originate a bounded MarketThesis, never an order; completed market data must confirm and RiskEngine remains authoritative.
+27. Local AI models/runtimes are repository-local, explicitly installed, verified, and ignored by Git. Feline stops only its recorded managed process; missing AI assets never block deterministic core operation.
 
 ## Architecture
 

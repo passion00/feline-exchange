@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "feline-exchange"
-version = "0.17.0"
+version = "0.17.1"
 description = "Local market observer and deterministic paper trader"
 requires-python = ">=3.11"
 dependencies = ["PySide6>=6.7,<7", "pyqtgraph>=0.13,<1"]
@@ -14,3 +14,6 @@ feline = "feline.cli:main"
 
 [tool.setuptools.packages.find]
 include = ["feline*"]
+
+[tool.setuptools.package-data]
+feline = ["resources/*.toml"]

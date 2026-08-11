@@ -63,9 +63,12 @@ event_block_new_positions = true
 
 [ai]
 enabled = true
-provider = "openai_compatible"
+# managed_local owns repository-local llama.cpp/model assets. Use
+# openai_compatible to retain an externally managed endpoint.
+provider = "managed_local"
 base_url = "http://127.0.0.1:8081"
-model = "llmware/qwen3-4b-instruct-gguf:Q4_K_M"
+model = "feline/qwen3-4b-q4km"
+# model_id = "qwen3-4b-q4km" # optional config lock; otherwise ignored user preference/default applies
 request_timeout_seconds = 30.0
 retries = 1
 temperature = 0.1
@@ -76,8 +79,16 @@ maximum_price_move_fraction = 0.001
 # advisory/record/confirm_or_veto remain compatible; news_thesis enables NEWS -> THESIS -> PRICE confirmation.
 decision_mode = "advisory"
 queue_size = 32
-local_model_path = "models/qwen3-4b-q4_k_m.gguf"
-llama_server_executable = "/path/to/llama-server"
+models_directory = "models"
+runtime_directory = "runtime/llama.cpp"
+preference_path = "data/ai_preferences.json"
+# custom_model_path and llama_server_executable are optional overrides.
+# custom_model_path = "/path/to/custom-model.gguf"
+# llama_server_executable = "/path/to/llama-server"
+context_size = 8192
+# threads = 8
+# gpu_layers = 0
+startup_timeout_seconds = 30.0
 reasoning_mode = "disabled"
 
 [news]

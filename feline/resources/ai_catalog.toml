@@ -1,0 +1,30 @@
+schema_version = "1.0"
+default_model = "qwen3-4b-q4km"
+
+[runtime]
+version = "b9637"
+
+[runtime.platforms.linux-x86_64]
+archive = "llama-b9637-bin-ubuntu-x64.tar.gz"
+url = "https://github.com/ggml-org/llama.cpp/releases/download/b9637/llama-b9637-bin-ubuntu-x64.tar.gz"
+sha256 = "a50ee14f021a9d8e92e30f622f7e3be1318ee1125bb9a9ba8d2025388df48743"
+size_bytes = 15512345
+executable = "llama-server"
+
+[[models]]
+id = "qwen3-4b-q4km"
+display_name = "Qwen3 4B Q4_K_M"
+family = "Qwen3"
+provider = "Qwen"
+parameters = "4B"
+quantization = "Q4_K_M"
+repository = "Qwen/Qwen3-4B-GGUF"
+url = "https://huggingface.co/Qwen/Qwen3-4B-GGUF/resolve/main/Qwen3-4B-Q4_K_M.gguf"
+filename = "Qwen3-4B-Q4_K_M.gguf"
+sha256 = "7485fe6f11af29433bc51cab58009521f205840f5b4ae3a32fa7f92e8534fdf5"
+size_bytes = 2497280256
+recommended_ram_gb = 6.0
+context_length = 32768
+api_alias = "feline/qwen3-4b-q4km"
+default = true
+capability_notes = "Instruction model with thinking and non-thinking modes; Feline defaults structured jobs to non-thinking where supported."

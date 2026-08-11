@@ -81,7 +81,12 @@ class FelineRuntime:
         self.database.save_health("paper_broker","paper_only",{})
         self.database.save_health("news_provider","not_configured",{})
         self.database.save_health("economic_calendar","not_configured",{})
-        self.database.save_health("ai","unknown",{"queue_depth":0})
+        ai_asset_details={"queue_depth":0,"provider":config.ai.provider}
+        ai_asset_state="unknown"
+        if config.ai.provider in {"managed_local","local_llama_cpp","llama_cpp"}:
+            from feline.intelligence.assets import LocalAIAssets
+            ai_asset_details={**ai_asset_details,**LocalAIAssets(config.ai).status()};ai_asset_state="installed_stopped" if ai_asset_details["runtime_state"]=="INSTALLED" and ai_asset_details["model_state"]=="INSTALLED" else "not_installed"
+        self.database.save_health("ai",ai_asset_state,ai_asset_details)
         for event_type in (PriceTick,CandleUpdate,RegimeEvent,SignalEvent,RiskEvent,AIAnalysisResult,EmergencyEvent,FeedHealthEvent,NewsEvent,MarketThesis,ThesisStateEvent):
             self.bus.subscribe(event_type, self._persist)
             if self.validation_tracker:self.bus.subscribe(event_type,self.validation_tracker.observe)
