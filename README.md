@@ -1,6 +1,8 @@
-# Feline Exchange v0.17.5 — Thinking AI and BIST Intelligence Evaluation
+# Feline Exchange v0.17.6 — Model Bake-off
 
-Feline Exchange is a local-first observer, deterministic execution/replay simulator, and market research platform. Version 0.17.5 makes thinking the default for news-thesis work, retains non-thinking short signal review, adds seeded Qwen sampling, causal direction consistency, and an isolated Turkish/BIST benchmark. The production path remains **news/economic event → bounded AI market thesis → dynamic market focus → deterministic completed-candle confirmation → RiskEngine**. See [Experiments](docs/EXPERIMENTS.md), [Local AI](docs/LOCAL_AI.md), [News Intelligence](docs/NEWS_INTELLIGENCE.md), and [AI Integration](docs/AI_INTEGRATION.md).
+Feline Exchange is a local-first observer, deterministic execution/replay simulator, and market research platform. Version 0.17.6 adds a pinned experimental Qwen3.5 4B Q5_K_M candidate and predeclared model bake-off gates without automatically replacing Qwen3 4B. The production path remains **news/economic event → bounded AI market thesis → dynamic market focus → deterministic completed-candle confirmation → RiskEngine**. See [Experiments](docs/EXPERIMENTS.md), [Local AI](docs/LOCAL_AI.md), [News Intelligence](docs/NEWS_INTELLIGENCE.md), and [AI Integration](docs/AI_INTEGRATION.md).
+
+The measured candidate did not pass promotion: non-thinking structured output worked, but thinking exhausted tested output budgets without returning final JSON. Qwen3 4B Q4_K_M therefore remains the default.
 
 Run the deterministic benchmark without a model or network: `python3 -m feline experiment news-intelligence --suite standard --ai fixture`.
 

@@ -193,7 +193,7 @@ async def _run_case(case: ExperimentCase, base_config: AppConfig, database_path:
     return result
 
 
-def run_news_intelligence(config: AppConfig, suite="standard", ai_mode="fixture", case_id=None, category=None, limit=None, seed=17, report_path: Path | None=None, formats="both", include_price=True, start_ai=False, resume: Path | None=None, progress: Callable[[str], None] | None=print, ai_timeout:float|None=None, reasoning:str|None=None) -> dict:
+def run_news_intelligence(config: AppConfig, suite="standard", ai_mode="fixture", case_id=None, category=None, limit=None, seed=17, report_path: Path | None=None, formats="both", include_price=True, start_ai=False, resume: Path | None=None, progress: Callable[[str], None] | None=print, ai_timeout:float|None=None, reasoning:str|None=None, model_id:str|None=None) -> dict:
     if ai_mode not in {"fixture", "local", "external"}: raise ExperimentError("--ai must be fixture, local, or external")
     if ai_timeout is not None:
         if ai_timeout<=0:raise ExperimentError("--ai-timeout must be positive")
@@ -201,6 +201,12 @@ def run_news_intelligence(config: AppConfig, suite="standard", ai_mode="fixture"
     if reasoning is not None:
         if reasoning not in {"thinking","disabled"}:raise ExperimentError("--reasoning must be thinking or disabled")
         config=replace(config,ai=replace(config.ai,news_thesis_reasoning_mode=reasoning))
+    selected_model = None
+    runtime_version = None
+    if model_id:
+        from feline.intelligence.assets import ModelCatalog
+        selected_model = ModelCatalog().get(model_id)
+        config=replace(config,ai=replace(config.ai,model_id=model_id,custom_model_path=None,local_model_path=None,model=selected_model.api_alias))
     config=replace(config,ai=replace(config.ai,inference_seed=seed))
     cases = load_cases(suite, case_id, category, limit)
     run_id = uuid4().hex[:20]; directory = resume or report_path or Path("data/experiments") / run_id
@@ -216,7 +222,7 @@ def run_news_intelligence(config: AppConfig, suite="standard", ai_mode="fixture"
         if ai_mode == "local":
             from feline.intelligence.assets import LocalAIAssets
             from feline.intelligence.operations import LocalAIProcessManager, ai_health
-            status = LocalAIAssets(config.ai).status()
+            assets = LocalAIAssets(config.ai); status = assets.status(); runtime_version=assets.catalog.runtime_version
             if status["runtime_state"] != "INSTALLED" or status["model_state"] != "INSTALLED": raise ExperimentError("Local AI is not installed. Run: python3 -m feline ai install")
             manager = LocalAIProcessManager(); health = ai_health(config.ai)
             if health["endpoint_state"] != "AVAILABLE":
@@ -237,7 +243,7 @@ def run_news_intelligence(config: AppConfig, suite="standard", ai_mode="fixture"
     finally:
         if started_here and manager: manager.stop()
     summary = summarize(results); ended_at = datetime.now(timezone.utc)
-    report = {"schema_version": "news-intelligence-experiment-v1", "metadata": {"experiment_id": run_id, "suite": suite, "started_at": started_at.isoformat(), "ended_at": ended_at.isoformat(), "feline_version": __version__, "git_commit": _git_commit(), "seed": seed, "ai_provider": ai_mode, "model": "fixture/news-market-impact-v1" if ai_mode == "fixture" else config.ai.model, "reasoning":config.ai.news_thesis_reasoning_mode,"temperature": 0 if ai_mode == "fixture" else config.ai.temperature,"top_p":config.ai.top_p,"top_k":config.ai.top_k,"min_p":config.ai.min_p,"news_thesis_timeout_seconds":config.ai.news_thesis_timeout_seconds, "execution_mode": "internal_paper_disarmed", "instrument_universe_mode": "deterministic_case_fixture", "database": str(database_path), "price_scenarios": include_price}, "summary": summary, "cases": results}
+    report = {"schema_version": "news-intelligence-experiment-v1", "metadata": {"experiment_id": run_id, "suite": suite, "started_at": started_at.isoformat(), "ended_at": ended_at.isoformat(), "feline_version": __version__, "git_commit": _git_commit(), "seed": seed, "ai_provider": ai_mode, "model": "fixture/news-market-impact-v1" if ai_mode == "fixture" else config.ai.model, "model_id": model_id, "model_family": selected_model.family if selected_model else None, "quantization": selected_model.quantization if selected_model else None, "runtime_version":runtime_version, "context_size":config.ai.context_size, "reasoning":config.ai.news_thesis_reasoning_mode,"temperature": 0 if ai_mode == "fixture" else config.ai.temperature,"top_p":config.ai.top_p,"top_k":config.ai.top_k,"min_p":config.ai.min_p,"news_thesis_timeout_seconds":config.ai.news_thesis_timeout_seconds, "execution_mode": "internal_paper_disarmed", "instrument_universe_mode": "deterministic_case_fixture", "database": str(database_path), "price_scenarios": include_price}, "summary": summary, "cases": results}
     report["substantive_digest"] = _substantive_digest(results, summary)
     if not _safe_report_payload(report): raise ExperimentError("Secret-like material detected in experiment report")
     report["outputs"] = write_reports(report, directory, formats)

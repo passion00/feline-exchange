@@ -1,5 +1,9 @@
 # AI Integration
 
+## v0.17.6 model selection
+
+Qwen3 4B Q4_K_M remains control/default; Qwen3.5 4B Q5_K_M is experimental. Both receive the same universe, schema, validator, seed, sampling, reasoning, deadline and execution-disabled experiment path. A newer model receives no additional authority.
+
 ## v0.17.5 purpose-specific reasoning
 
 News market-impact jobs default to Qwen thinking mode, a 900-second total deadline, and explicit sampling (`temperature=0.6`, `top_p=0.95`, `top_k=20`, `min_p=0`, seed 17). Short-lived signal assessment remains non-thinking with a 30-second deadline. Managed llama.cpp receives thinking and seed controls per request; external endpoints receive only portable parameters. Hidden `reasoning_content` is discarded. Only strict final JSON may construct a thesis. A structured causal effect must agree with directional bias; this check does not infer sentiment from prose or grant execution authority.

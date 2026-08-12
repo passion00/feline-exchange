@@ -1,5 +1,15 @@
 # News Intelligence Experiments
 
+## v0.17.6 model bake-off
+
+`--model-id qwen3-4b-q4km` and `--model-id qwen35-4b-q5km` run catalog models without changing saved preference. After four standard/BIST runs, `python3 -m feline experiment model-bakeoff CONTROL_STANDARD CONTROL_BIST CANDIDATE_STANDARD CANDIDATE_BIST --report data/reports/model-bakeoff-v0176` applies predeclared gates.
+
+Gates: BIST mean score +0.03; standard score no worse than -0.02; relevant-thesis rate no worse than -0.05; irrelevant false positives no worse than +0.05; no added hostile false positives; zero safety/schema failures and candidate timeouts; no increased causal contradictions; CPU median/P95 at most 300/900 seconds. Every gate must pass. Scores do not demonstrate profitability.
+
+### v0.17.6 measured decision
+
+Qwen3.5 was **not promoted**. On llama.cpp b9637, Q5_K_M, seed 17 and thinking enabled, the candidate exhausted both 2,048 and 4,096 completion-token budgets entirely as hidden reasoning and returned empty final content. The oil smoke cases therefore failed strict JSON validation after 361.7 and 731.4 seconds; safety passed and no order was attempted. A four-case non-thinking smoke run was mechanically healthy (4/4 valid, score 0.98875, median 57.2 s, no hostile false positive), proving model/runtime loading and the non-thinking template path work. Because thinking plus final structured output is mandatory for news thesis, full standard/BIST candidate suites would not yield evaluable semantic scores and were not run. Qwen3 remains default.
+
 ## v0.17.5 thinking A/B and BIST-TR
 
 `--reasoning thinking|disabled` controls news inference independently of signal review. The experiment seed now reaches managed llama.cpp. Reports include causal-direction consistency, usage when exposed, and sampler metadata. `--suite bist-tr` uses authored Turkish cases and synthetic BIST-like instruments with bounded exposure metadata; expected answers remain evaluation-only.

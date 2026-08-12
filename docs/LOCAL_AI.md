@@ -1,5 +1,13 @@
 # Portable local AI
 
+## v0.17.6 experimental Qwen3.5 candidate
+
+The catalog retains `qwen3-4b-q4km` as default and adds selectable `qwen35-4b-q5km`. The candidate is Unsloth's Q5_K_M conversion of official `Qwen/Qwen3.5-4B`, pinned at repository revision `e87f176479d0855a907a41277aca2f8ee7a09523`, 3,143,656,608 bytes and SHA-256 `8814232b85594dcd46c50e5b8b29324a7efe9e746edbe8a3d1df3d3fce7aad39`. This reputable third-party conversion is used because Qwen does not publish the requested official GGUF. Pinned llama.cpp b9637 supports `qwen35`, JSON Schema, seed and configured samplers, so no runtime upgrade was needed.
+
+Install with `python3 -m feline ai select-model qwen35-4b-q5km` followed by `python3 -m feline ai install-model --yes`. Experiments can use `--model-id` without changing the saved preference. Qwen3.5 uses chat-template `enable_thinking`; it does not support Qwen3's `/think` soft switch. Feline retains an 8,192-token operational CPU context on 16 GB hosts.
+
+The v0.17.6 CPU bake-off found b9637/Qwen3.5 non-thinking output reliable, but thinking consumed the complete 2,048- and 4,096-token budgets without producing final JSON. The entry remains experimental and is not the default. This is a model/runtime operational limitation, not permission to parse hidden reasoning or relax validation.
+
 ## Qwen thinking policy
 
 The managed b9637 server starts purpose-neutral. News requests enable Qwen thinking; signal assessment disables it. Managed requests explicitly carry sampler parameters and the experiment seed. Seeds improve repeatability, though runtime scheduling and provider implementation may prevent byte-identical generations.

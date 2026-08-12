@@ -1,5 +1,9 @@
 # News-driven market intelligence
 
+## Model bake-off boundary
+
+v0.17.6 compares Qwen3 and Qwen3.5 on standard and Turkish/BIST corpora under identical controls. Promotion uses predeclared semantic, false-positive, hostile-content, structured-output, causal-consistency, timeout, safety and CPU-latency gates. A benchmark win neither proves profitability nor authorizes execution.
+
 ## Thinking and Turkish news
 
 Feline sends original UTF-8 Turkish news to the model without an external translation dependency. Instrument context can include bounded sector, exporter/importer, commodity, FX, and interest-rate sensitivities. Thinking latency is separate from catalyst expiry and entry staleness.

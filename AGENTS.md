@@ -1,5 +1,7 @@
 # Feline Exchange Engineering Invariants
 
+v0.17.6 bake-off invariant: model promotion uses four isolated standard/BIST control/candidate reports and predeclared semantic, false-positive, structured-output, safety, causal-consistency, timeout, and CPU-latency gates. Qwen3 remains available and no newer model becomes default merely because it is newer.
+
 v0.17.5 reasoning invariant: news-thesis jobs default to thinking with a fifteen-minute deadline and seeded explicit sampling. Short signal assessment remains independently non-thinking and short-lived. Hidden reasoning is never thesis authority; only strict final structured output is consumed.
 
 v0.17.4 structured-output invariant: managed-local news analysis uses a bounded JSON Schema generated from the supplied instrument universe, followed by the same authoritative fail-closed validator. Invalid schemas are never semantically evaluated or repaired.

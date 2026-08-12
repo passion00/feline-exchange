@@ -68,7 +68,7 @@ enabled = true
 provider = "managed_local"
 base_url = "http://127.0.0.1:8081"
 model = "feline/qwen3-4b-q4km"
-# model_id = "qwen3-4b-q4km" # optional config lock; otherwise ignored user preference/default applies
+# model_id = "qwen3-4b-q4km" # default/control; experimental candidate: qwen35-4b-q5km
 # Legacy/default deadline for uncategorized AI jobs.
 request_timeout_seconds = 30.0
 # An already-existing deterministic signal is short-lived.

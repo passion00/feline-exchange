@@ -28,3 +28,21 @@ context_length = 32768
 api_alias = "feline/qwen3-4b-q4km"
 default = true
 capability_notes = "Instruction model with thinking and non-thinking modes; Feline defaults structured jobs to non-thinking where supported."
+
+[[models]]
+id = "qwen35-4b-q5km"
+display_name = "Qwen3.5 4B Q5_K_M (Experimental)"
+family = "Qwen3.5"
+provider = "Qwen / Unsloth quantization"
+parameters = "4B"
+quantization = "Q5_K_M"
+repository = "unsloth/Qwen3.5-4B-GGUF"
+url = "https://huggingface.co/unsloth/Qwen3.5-4B-GGUF/resolve/e87f176479d0855a907a41277aca2f8ee7a09523/Qwen3.5-4B-Q5_K_M.gguf"
+filename = "Qwen3.5-4B-Q5_K_M.gguf"
+sha256 = "8814232b85594dcd46c50e5b8b29324a7efe9e746edbe8a3d1df3d3fce7aad39"
+size_bytes = 3143656608
+recommended_ram_gb = 7.0
+context_length = 262144
+api_alias = "feline/qwen35-4b-q5km"
+default = false
+capability_notes = "Experimental text-only use of Qwen/Qwen3.5-4B. Unsloth GGUF pinned by repository revision and LFS SHA-256; hybrid thinking is selected through chat_template_kwargs. Feline uses an 8192-token operational context on CPU."

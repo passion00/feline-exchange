@@ -176,7 +176,7 @@ class AssetDownloader:
         partial = destination.with_name(destination.name + ".part")
         for attempt in range(self.retries + 1):
             offset = partial.stat().st_size if partial.exists() else 0
-            headers = {"User-Agent": "FelineExchange/0.17.5"}
+            headers = {"User-Agent": "FelineExchange/0.17.6"}
             if offset:
                 headers["Range"] = f"bytes={offset}-"
             try:
@@ -259,7 +259,7 @@ class LocalAIAssets:
 
     def model_path(self) -> Path:
         custom = self.config.custom_model_path or self.preference().get("custom_model_path") or self.config.local_model_path
-        if custom:
+        if self.selected_model_id == "custom" and custom:
             return resolve_install_path(custom, "", self.root)
         return self.models_dir / self.selected_model().filename
 
@@ -326,7 +326,7 @@ class LocalAIAssets:
         temporary.replace(self.preference_path)
 
     def install_model(self, progress=None) -> Path:
-        if self.config.custom_model_path or self.preference().get("custom_model_path"):
+        if self.selected_model_id == "custom":
             path = self.model_path()
             if not path.is_file():
                 raise AIAssetError(f"Custom model does not exist: {path}")
